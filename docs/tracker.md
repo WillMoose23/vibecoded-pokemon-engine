@@ -1,5 +1,34 @@
 # Issue tracker
 
+# Issue tracker
+
+## IMPROVEMENT-MAP-097
+
+```
+ID: IMPROVEMENT-MAP-097
+TYPE: IMPROVEMENT
+TITLE: Version-control Cursor skills on development branch
+
+DESCRIPTION:
+Extend Cursor workspace backup to include project skills under .cursor/skills/,
+synced from ~/.cursor/skills/, with sync_cursor_skills.py and sync_cursor_backup.py
+orchestrating plans + skills before push.
+
+EXPECTED_BEHAVIOR:
+- tools/sync_cursor_skills.py merges global skill folders into .cursor/skills/
+- tools/sync_cursor_backup.py runs plan + skill sync
+- Git-Push-Development-Rule uses sync_cursor_backup.py
+- Project-only skills (planning-rule, event-script-opcode-docs, etc.) remain in repo
+
+SCOPE:
+.cursor/skills/, tools/sync_cursor_skills.py, tools/sync_cursor_backup.py,
+.gitignore, .cursor/rules/Git-Push-Development-Rule.mdc, docs/tools_doc.md
+
+PRIORITY: MEDIUM
+STATUS: DONE
+ASSIGNED_TO: Cursor
+```
+
 ## IMPROVEMENT-MAP-096
 
 ```

@@ -32,11 +32,11 @@ Pair with **Git-Pull-Sync-Rule** when they ask to sync both directions.
    make test
    python3 -m unittest discover -s tests -q
    ```
-4. **Cursor plans** — sync global plans into the repo before push:
+4. **Cursor plans & skills** — sync into the repo before push:
    ```bash
-   python3 tools/sync_cursor_plans.py
+   python3 tools/sync_cursor_backup.py
    ```
-   Commit any new/changed files under `.cursor/plans/*.plan.md`.
+   Commit changes under `.cursor/plans/` and `.cursor/skills/`.
 5. **No secrets** — never stage `.env`, tokens, or ignored caches (see `.gitignore`).
 
 If any gate fails, fix or report blockers; **do not push**.
