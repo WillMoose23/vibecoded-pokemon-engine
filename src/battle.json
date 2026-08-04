@@ -1,0 +1,7 @@
+{
+  "defaultBackgroundId": "black",
+  "backgrounds": [
+    { "id": "black", "file": "" },
+    { "id": "example", "file": "src/Graphics/Battlebacks/example.png" }
+  ]
+}

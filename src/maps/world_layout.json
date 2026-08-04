@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "editorTool": "1.0",
+  "originMapId": "Maple_Town",
+  "originInstanceId": "eb4a508f-5805-43a4-b66f-d3078525d1e3",
+  "edgeSnapPx": 6.0,
+  "nodes": [
+    {
+      "mapId": "Maple_Town",
+      "worldX": -10.0,
+      "worldY": 2.0,
+      "widthPx": 120,
+      "heightPx": 120,
+      "mapWidthTiles": 120,
+      "mapHeightTiles": 120,
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "interior": false,
+      "instanceId": "eb4a508f-5805-43a4-b66f-d3078525d1e3"
+    },
+    {
+      "mapId": "tree_map_border",
+      "worldX": -30.0,
+      "worldY": -14.0,
+      "widthPx": 64,
+      "heightPx": 16,
+      "mapWidthTiles": 64,
+      "mapHeightTiles": 16,
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "interior": false,
+      "instanceId": "06770d25-2ffd-4054-8d00-4caefa5be1d8"
+    },
+    {
+      "mapId": "route_2",
+      "worldX": 37.0,
+      "worldY": -62.0,
+      "widthPx": 64,
+      "heightPx": 64,
+      "mapWidthTiles": 64,
+      "mapHeightTiles": 64,
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "interior": false,
+      "instanceId": "5824209e-4141-48cb-894c-2dcf756a7127"
+    }
+  ],
+  "edges": [
+    {
+      "a": "eb4a508f-5805-43a4-b66f-d3078525d1e3",
+      "b": "06770d25-2ffd-4054-8d00-4caefa5be1d8",
+      "mapIdA": "Maple_Town",
+      "mapIdB": "tree_map_border",
+      "kind": "proximity",
+      "distanceWorldPx": 0.0
+    },
+    {
+      "a": "eb4a508f-5805-43a4-b66f-d3078525d1e3",
+      "b": "5824209e-4141-48cb-894c-2dcf756a7127",
+      "mapIdA": "Maple_Town",
+      "mapIdB": "route_2",
+      "kind": "proximity",
+      "distanceWorldPx": 0.0
+    },
+    {
+      "a": "06770d25-2ffd-4054-8d00-4caefa5be1d8",
+      "b": "5824209e-4141-48cb-894c-2dcf756a7127",
+      "mapIdA": "tree_map_border",
+      "mapIdB": "route_2",
+      "kind": "proximity",
+      "distanceWorldPx": 3.0
+    }
+  ],
+  "renderOrder": [
+    "eb4a508f-5805-43a4-b66f-d3078525d1e3",
+    "06770d25-2ffd-4054-8d00-4caefa5be1d8",
+    "5824209e-4141-48cb-894c-2dcf756a7127"
+  ],
+  "compositeBounds": {
+    "minWorldX": -30.0,
+    "minWorldY": -62.0,
+    "maxWorldX": 110.0,
+    "maxWorldY": 122.0
+  },
+  "editorCamera": {
+    "x": 19.535483075981023,
+    "y": -41.53914577226507,
+    "zoom": 11.586575189467544
+  }
+}

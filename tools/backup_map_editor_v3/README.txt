@@ -1,0 +1,1 @@
+FEATURE-MAP-030 snapshot: map editor and key config as of map editor v3 work start (pre–Events workspace / event scripting changes). Live editor uses MAP_EDITOR_TOOL_VERSION 3.0 in tools/map_editor.py.

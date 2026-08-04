@@ -1,0 +1,17 @@
+Released / done (project thread)
+-------------------------------
+
+- Data: Nested species JSON with explicit form keys; shadow-style forms folded under alternateFormeShadow; monster.json sorted to 649 species with consistent keys.
+- Battle UI: Move panel (Q/W/E/R), HP bars with placement and color thresholds, corner battle sprites with scaling (player/foe sizing and positioning).
+- Sprites: Front/back paths from JSON; title and battle scaling behavior aligned with the SDL logical resolution.
+- Dex / species fixes: Corrections for Giratina/Shaymin and related entries; placeholder handling for 650+ entries where applicable.
+- Tooling: Sync/migrate scripts updated to match the species and form layout.
+
+Future / backlog
+----------------
+
+- Full overworld: render maps from JSON/tilesets in-game, camera, collision, NPCs.
+- In-SDL map editor (optional) or richer external editor features (autotile, multiple layers).
+- Audio: BGM and SFX pipeline, battle cries.
+- Battle backgrounds: ship art under src/Graphics/Battlebacks and expand battle.json.
+- Networking / persistence: saves, trading, online battles (if ever in scope).

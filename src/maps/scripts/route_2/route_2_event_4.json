@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "map": "route_2",
+  "script_1": [
+    {
+      "show_message": {
+        "text": "Hello! Press Q to close."
+      }
+    }
+  ],
+  "script_2": []
+}

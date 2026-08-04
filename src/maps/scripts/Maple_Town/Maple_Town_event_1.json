@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "map": "Maple_Town",
+  "script_1": [
+    {
+      "face_west": {}
+    },
+    {
+      "face_south": {}
+    },
+    {
+      "call_subflow": {
+        "name": "process",
+        "vars": {}
+      }
+    },
+    {
+      "walk_to_coords": {
+        "direction": "down",
+        "steps": 1,
+        "faceFirst": true
+      }
+    },
+    {
+      "call_subflow": {
+        "name": "process",
+        "vars": {}
+      }
+    },
+    {
+      "region": {
+        "name": "Region"
+      }
+    },
+    {
+      "end_region": {}
+    }
+  ],
+  "script_2": [],
+  "subflows": {
+    "process": [
+      {
+        "show_message": {
+          "text": "Hello! Press Q to close."
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,112 @@
+{
+  "keys": {
+    "tileset_prev": [
+      "equals",
+      "plus",
+      "kp_plus",
+      "pageup"
+    ],
+    "tileset_next": [
+      "minus",
+      "kp_minus",
+      "pagedown"
+    ],
+    "save": [
+      "s"
+    ],
+    "save_as": [],
+    "open_map": [
+      "p"
+    ],
+    "new_map": [
+      "n"
+    ],
+    "map_prev_file": [
+      "leftbracket"
+    ],
+    "map_next_file": [
+      "rightbracket"
+    ],
+    "pan_up": [
+      "up"
+    ],
+    "pan_down": [
+      "down"
+    ],
+    "pan_left": [
+      "left"
+    ],
+    "pan_right": [
+      "right"
+    ],
+    "cycle_mode": [
+      "tab"
+    ],
+    "set_map_size": [
+      "g"
+    ],
+    "import_tileset": [
+      "o"
+    ],
+    "rescale_tileset": [
+      "u"
+    ],
+    "toggle_help": [
+      "h"
+    ],
+    "toggle_world_labels": [
+      "l"
+    ],
+    "layer_prev": [
+      "comma"
+    ],
+    "layer_next": [
+      "period"
+    ],
+    "layer_add": [
+      "insert",
+      "l"
+    ],
+    "layer_remove": [
+      "end"
+    ],
+    "undo": [
+      "z"
+    ],
+    "redo": [
+      "r"
+    ],
+    "toggle_eraser": [
+      "e"
+    ],
+    "toggle_fill": [
+      "f"
+    ],
+    "delete_map": [
+      "d"
+    ],
+    "open_events_launcher": [
+      "v"
+    ],
+    "toggle_valid_player_stands": [
+      "j"
+    ],
+    "toggle_valid_player_stands_orange": [
+      "k"
+    ]
+  },
+  "eventScriptEditor": {
+    "showDocumentationPane": true,
+    "panelWidth": 1120,
+    "panelBodyHeight": 587,
+    "opcodePaletteSort": "source"
+  },
+  "eventEngine": {
+    "favorites": [],
+    "fracLeft": 0.1869,
+    "fracRight": 0.1369,
+    "fracLeftH": 0.2746,
+    "fracMidV": 0.7121,
+    "collapsedCategories": []
+  }
+}

@@ -1,0 +1,417 @@
+{
+  "version": 1,
+  "ops": {
+    "end_script": {
+      "label": "End script",
+      "status": "implemented",
+      "category": "Script control",
+      "required_params": [],
+      "description": "Ends the script immediately. Unlocks the player if they were locked.",
+      "default_args": {},
+      "args_help": {}
+    },
+    "lock_player": {
+      "label": "Lock player",
+      "status": "implemented",
+      "category": "Script control",
+      "required_params": [],
+      "description": "Prevents map movement until unlock_player runs (or the script ends).",
+      "default_args": {},
+      "args_help": {}
+    },
+    "unlock_player": {
+      "label": "Unlock player",
+      "status": "implemented",
+      "category": "Script control",
+      "required_params": [],
+      "description": "Re-enables map movement after lock_player.",
+      "default_args": {},
+      "args_help": {}
+    },
+    "wait_frames": {
+      "label": "Wait frames",
+      "status": "implemented",
+      "category": "Script control",
+      "required_params": [],
+      "description": "Waits for n engine frames before advancing to the next action.",
+      "default_args": { "n": 30 },
+      "args_help": { "n": "Integer number of frames to wait (>= 0)." }
+    },
+    "show_message": {
+      "label": "Show message",
+      "status": "implemented",
+      "category": "Messages",
+      "required_params": [],
+      "description": "Shows overlay text. In the map viewer, the player dismisses with Q or Space.",
+      "default_args": { "text": "Hello! Press Q to close." },
+      "args_help": { "text": "Message string shown in the overlay." }
+    },
+    "close_message": {
+      "label": "Close message",
+      "status": "implemented",
+      "category": "Messages",
+      "required_params": [],
+      "description": "Clears the message overlay without waiting for player input.",
+      "default_args": {},
+      "args_help": {}
+    },
+    "set_flag": {
+      "label": "Set flag",
+      "status": "implemented",
+      "category": "Flags",
+      "required_params": [],
+      "description": "FEATURE-MAP-072: Sets a persistent game-state flag (saved to save/game_state.json). Use the flag/variable registry to declare flag names.",
+      "default_args": { "name": "flag_a" },
+      "args_help": { "name": "Flag name string (declare it in the flag registry)." }
+    },
+    "clear_flag": {
+      "label": "Clear flag",
+      "status": "implemented",
+      "category": "Flags",
+      "required_params": [],
+      "description": "FEATURE-MAP-072: Clears a persistent game-state flag by name (saved to save/game_state.json).",
+      "default_args": { "name": "flag_a" },
+      "args_help": { "name": "Flag name string." }
+    },
+    "unless_flag": {
+      "label": "Unless flag (skip N)",
+      "status": "implemented",
+      "category": "Flags",
+      "required_params": [],
+      "description": "If the named flag is false, skips the next skip actions (relative skip count).",
+      "default_args": { "name": "flag_a", "skip": 0 },
+      "args_help": {
+        "name": "Flag to test.",
+        "skip": "How many following actions to skip when the flag is false."
+      }
+    },
+    "if_flag": {
+      "label": "If flag (block)",
+      "status": "implemented",
+      "category": "Control flow",
+      "required_params": [],
+      "block": "open",
+      "end": "end_if",
+      "description": "Runs the actions in this block (up to the matching End if) only when the named flag is set. The skip count is computed automatically on load; you do not set it by hand.",
+      "default_args": { "name": "flag_a" },
+      "args_help": {
+        "name": "Flag to test; the block runs when this flag is true.",
+        "skip": "Auto-computed body length; managed by the editor and engine. Leave unset."
+      }
+    },
+    "end_if": {
+      "label": "End if",
+      "status": "implemented",
+      "category": "Control flow",
+      "block": "close",
+      "opens": "if_flag",
+      "required_params": [],
+      "description": "Marks the end of an If flag block. Inserted/managed automatically by the block editor.",
+      "default_args": {},
+      "args_help": {}
+    },
+    "repeat": {
+      "label": "Repeat (block)",
+      "status": "implemented",
+      "category": "Control flow",
+      "block": "open",
+      "end": "end_repeat",
+      "required_params": [],
+      "description": "Repeats the actions in this block (up to the matching End repeat) n times. The skip count is computed automatically on load; you do not set it by hand.",
+      "default_args": { "n": 2 },
+      "args_help": {
+        "n": "Number of times to run the block (integer >= 0; 0 skips the block).",
+        "skip": "Auto-computed body length; managed by the editor and engine. Leave unset."
+      }
+    },
+    "end_repeat": {
+      "label": "End repeat",
+      "status": "implemented",
+      "category": "Control flow",
+      "block": "close",
+      "opens": "repeat",
+      "required_params": [],
+      "description": "Marks the end of a Repeat block. Inserted/managed automatically by the block editor.",
+      "default_args": {},
+      "args_help": {}
+    },
+    "warp_player": {
+      "label": "Warp player",
+      "status": "implemented",
+      "category": "Map / warp",
+      "required_params": ["mapId", "x", "y"],
+      "description": "Loads another map and places the player at tile (x, y). Ends the script. If mapId appears in world_layout.json, opens Overworld at map-local (x,y) on that instance.",
+      "default_args": { "mapId": "sample_room", "x": 0, "y": 0 },
+      "args_help": {
+        "mapId": "Target map id (filename stem under src/maps).",
+        "x": "Destination tile X (map-local anchor tile, same space as warp_player).",
+        "y": "Destination tile Y. Runtime may snap to the nearest in-bounds walkable anchor."
+      }
+    },
+    "set_player_facing": {
+      "label": "Set player facing",
+      "status": "implemented",
+      "category": "Player facing",
+      "required_params": [],
+      "description": "Sets the trainer walk sprite facing row in the map viewer from a direction string (up/down/left/right aliases include north/south/east/west).",
+      "default_args": { "dir": "down" },
+      "args_help": { "dir": "One of: up, down, left, right (also north, south, west, east, n, s, w, e)." }
+    },
+    "walk_to_coords": {
+      "label": "Walk (direction + steps)",
+      "status": "implemented",
+      "category": "Player movement",
+      "required_params": ["direction", "steps"],
+      "description": "FEATURE-MAP-071: Blocking rail movement — moves the player exactly `steps` tile strides along the specified cardinal `direction`. Movement is strictly along that axis; the script does not advance until all steps complete or a blocked footprint is hit (early finish). If `faceFirst` is true (default), the player is turned to face `direction` before the first step — useful for turn-only (steps:0) or turn-then-walk patterns. Set `faceFirst` to false for walk-only or walk-then-turn chaining after an explicit face_* opcode.",
+      "default_args": { "direction": "down", "steps": 1, "faceFirst": true },
+      "args_help": {
+        "direction": "Cardinal direction to walk: up/down/left/right (also north/south/west/east, n/s/w/e).",
+        "steps": "Number of tile strides to move. 0 with faceFirst:true produces a turn-only with no movement.",
+        "faceFirst": "Face the direction before the first step (default true). Set false to walk without re-facing, e.g. after an explicit face_* opcode."
+      }
+    },
+    "run_to_coords": {
+      "label": "Run (direction + steps)",
+      "status": "implemented",
+      "category": "Player movement",
+      "required_params": ["direction", "steps"],
+      "description": "FEATURE-MAP-071: Same rail movement as walk_to_coords but uses a faster walk animation timing (half the per-segment frame duration) for the duration of the opcode. Accepts the same direction/steps/faceFirst arguments.",
+      "default_args": { "direction": "down", "steps": 1, "faceFirst": true },
+      "args_help": {
+        "direction": "Cardinal direction to run: up/down/left/right (also north/south/west/east, n/s/w/e).",
+        "steps": "Number of tile strides to move.",
+        "faceFirst": "Face the direction before the first step (default true)."
+      }
+    },
+    "face_north": {
+      "label": "Face north",
+      "status": "implemented",
+      "category": "Player facing",
+      "required_params": [],
+      "description": "Sets player facing to north (up) without moving. Not blocking beyond one frame.",
+      "default_args": {},
+      "args_help": {}
+    },
+    "face_south": {
+      "label": "Face south",
+      "status": "implemented",
+      "category": "Player facing",
+      "required_params": [],
+      "description": "Sets player facing to south (down) without moving.",
+      "default_args": {},
+      "args_help": {}
+    },
+    "face_east": {
+      "label": "Face east",
+      "status": "implemented",
+      "category": "Player facing",
+      "required_params": [],
+      "description": "Sets player facing to east (right) without moving.",
+      "default_args": {},
+      "args_help": {}
+    },
+    "face_west": {
+      "label": "Face west",
+      "status": "implemented",
+      "category": "Player facing",
+      "required_params": [],
+      "description": "Sets player facing to west (left) without moving.",
+      "default_args": {},
+      "args_help": {}
+    },
+    "move_camera": {
+      "label": "Move camera",
+      "status": "implemented",
+      "category": "Camera",
+      "required_params": ["direction", "steps"],
+      "description": "Blocking: pans the view by shifting the camera follow offset one map tile per step in the given direction. Between steps, waits `speed` engine frames (0 = one tile per frame). Resets when the script ends.",
+      "default_args": { "direction": "east", "steps": 1, "speed": 0 },
+      "args_help": {
+        "direction": "north|south|east|west or up|down|left|right (or n,s,e,w).",
+        "steps": "How many tile steps to pan (integer >= 0).",
+        "speed": "Frames to wait after each step before the next (>= 0); 0 advances one step per engine frame."
+      }
+    },
+    "camera_zoom_in": {
+      "label": "Camera zoom in",
+      "status": "implemented",
+      "category": "Camera",
+      "required_params": [],
+      "description": "Multiplies map/overworld draw tile scale (clamped). Not animated; advances immediately.",
+      "default_args": {},
+      "args_help": {}
+    },
+    "camera_zoom_out": {
+      "label": "Camera zoom out",
+      "status": "implemented",
+      "category": "Camera",
+      "required_params": [],
+      "description": "Divides map/overworld draw tile scale (clamped). Not animated; advances immediately.",
+      "default_args": {},
+      "args_help": {}
+    },
+    "camera_follow_player": {
+      "label": "Camera follow player",
+      "status": "implemented",
+      "category": "Camera",
+      "required_params": [],
+      "description": "Clears script-driven camera tile offset from move_camera, stops an in-progress scripted pan, and re-syncs the map/overworld camera to follow the player (same clamping as after scripted walks). Does not reset camera_zoom_in/out scale.",
+      "default_args": {},
+      "args_help": {}
+    },
+    "set_var": {
+      "label": "Set variable",
+      "status": "implemented",
+      "category": "Variables",
+      "required_params": [],
+      "description": "FEATURE-MAP-077: Assigns a scratch variable (int/string/bool) in the current scope. Scratch variables are NOT persisted; they last only for the current script run (or call frame for subflow locals).",
+      "default_args": { "name": "counter", "value": 0 },
+      "args_help": {
+        "name": "Variable name.",
+        "value": "Value to assign (number, string, or boolean)."
+      }
+    },
+    "if_var": {
+      "label": "If variable (block)",
+      "status": "implemented",
+      "category": "Variables",
+      "block": "open",
+      "end": "end_if_var",
+      "required_params": [],
+      "description": "FEATURE-MAP-077: Runs the actions in this block (up to the matching End if var) only when the comparison holds. The skip count is computed automatically on load.",
+      "default_args": { "name": "counter", "op": "==", "value": 0 },
+      "args_help": {
+        "name": "Variable to test.",
+        "op": "Comparison operator: ==, !=, <, or >.",
+        "value": "Value to compare against.",
+        "skip": "Auto-computed body length; managed by the editor and engine. Leave unset."
+      }
+    },
+    "end_if_var": {
+      "label": "End if var",
+      "status": "implemented",
+      "category": "Variables",
+      "block": "close",
+      "opens": "if_var",
+      "required_params": [],
+      "description": "Marks the end of an If variable block. Inserted/managed automatically by the block editor.",
+      "default_args": {},
+      "args_help": {}
+    },
+    "call_subflow": {
+      "label": "Call subflow",
+      "status": "implemented",
+      "category": "Subflow / organization",
+      "required_params": ["name"],
+      "description": "FEATURE-MAP-074: Runs a named subflow like a method and returns to the caller when it finishes. Resolves an in-file subflow first, then a library connector under src/maps/scripts/_library/. Named args in `vars` seed the callee's local scratch variables. Recursion is depth-guarded.",
+      "default_args": { "name": "my_subflow", "vars": {} },
+      "args_help": {
+        "name": "Subflow name (in-file subflow or library connector).",
+        "vars": "Optional object of named arguments that become the callee's local variables."
+      }
+    },
+    "stop_script": {
+      "label": "Stop script",
+      "status": "implemented",
+      "category": "Subflow / organization",
+      "required_params": [],
+      "description": "FEATURE-MAP-075: Ends the entire script immediately, even inside a subflow. Unlocks the player if locked.",
+      "default_args": {},
+      "args_help": {}
+    },
+    "goto": {
+      "label": "Go to label",
+      "status": "implemented",
+      "category": "Subflow / organization",
+      "required_params": ["label"],
+      "description": "FEATURE-MAP-075: Jumps to a label within the current flow and continues executing below it. Unknown labels are a safe no-op. Choose the target from the dropdown of labels in this flow.",
+      "default_args": { "label": "" },
+      "args_help": { "label": "Name of a label opcode in the current flow." }
+    },
+    "label": {
+      "label": "Label",
+      "status": "implemented",
+      "category": "Subflow / organization",
+      "required_params": ["name"],
+      "description": "FEATURE-MAP-075: Named jump target for goto. No runtime effect on its own.",
+      "default_args": { "name": "label_a" },
+      "args_help": { "name": "Label name referenced by goto." }
+    },
+    "comment": {
+      "label": "Comment",
+      "status": "implemented",
+      "category": "Subflow / organization",
+      "required_params": [],
+      "description": "FEATURE-MAP-076: A note for organization only. Not an action; has no runtime effect.",
+      "default_args": { "text": "" },
+      "args_help": { "text": "Free-form comment text." }
+    },
+    "region": {
+      "label": "Region (block)",
+      "status": "implemented",
+      "category": "Subflow / organization",
+      "block": "open",
+      "end": "end_region",
+      "required_params": [],
+      "description": "FEATURE-MAP-076: Organization-only collapsible/nestable marker. Groups and (in the editor) collapses the steps inside it. Has NO control-flow effect — the engine simply skips it.",
+      "default_args": { "name": "Region" },
+      "args_help": { "name": "Display name for the region (renamable)." }
+    },
+    "end_region": {
+      "label": "End region",
+      "status": "implemented",
+      "category": "Subflow / organization",
+      "block": "close",
+      "opens": "region",
+      "required_params": [],
+      "description": "Marks the end of a Region block. Inserted/managed automatically by the block editor.",
+      "default_args": {},
+      "args_help": {}
+    },
+    "set_route_music": {
+      "label": "Set route music",
+      "status": "implemented",
+      "category": "Audio",
+      "required_params": [],
+      "description": "Changes looping route BGM to a track under src/audio/.",
+      "default_args": { "track": "", "fadeMs": 0 },
+      "args_help": {
+        "track": "Music stem (no .ogg extension).",
+        "fadeMs": "Crossfade duration in milliseconds (0 = instant)."
+      }
+    },
+    "play_music_once": {
+      "label": "Play music once",
+      "status": "implemented",
+      "category": "Audio",
+      "required_params": [],
+      "description": "Plays a music track once (no loop).",
+      "default_args": { "track": "" },
+      "args_help": { "track": "Music stem under src/audio/." }
+    },
+    "start_trainer_battle": {
+      "label": "Start trainer battle",
+      "status": "implemented",
+      "category": "Battle",
+      "required_params": [],
+      "description": "Starts a scripted trainer battle; script yields until battle ends.",
+      "default_args": {
+        "battleId": "",
+        "outcomeMode": "normal",
+        "scriptedLossTurns": 0,
+        "music": "",
+        "background": "",
+        "trainers": []
+      },
+      "args_help": {
+        "battleId": "Optional library battle id (_library/battles/).",
+        "outcomeMode": "normal | scripted_win | scripted_loss",
+        "scriptedLossTurns": "Turns before scripted-loss one-shots (scripted_loss only).",
+        "music": "Override BGM stem.",
+        "background": "battle.json background id.",
+        "trainers": "Inline 1-2 trainers with party arrays.",
+        "lossWarp": "Optional {mapId,x,y} loss destination."
+      }
+    }
+  }
+}

@@ -1,0 +1,57 @@
+# -----------------------------
+# Makefile for SDL2 + SDL2_ttf Project
+# -----------------------------
+
+# Compiler
+CXX := g++
+
+# Directories
+SRC_DIR := src
+INC_DIR := include
+BUILD_DIR := build
+
+# Executable
+TARGET := $(BUILD_DIR)/app
+
+# Source files
+SRCS := $(wildcard $(SRC_DIR)/*.cpp)
+
+# Object files
+OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(SRCS))
+
+# Compiler flags (SDL2 + SDL2_ttf via pkg-config)
+CXXFLAGS := -std=c++17 -Wall -Wextra -I$(INC_DIR) -MMD -MP \
+            $(shell pkg-config --cflags sdl2 SDL2_ttf)
+
+# Linker flags
+LDFLAGS := $(shell pkg-config --libs sdl2 SDL2_ttf)
+
+# -----------------------------
+# Default target
+# -----------------------------
+all: $(TARGET)
+
+# Link
+$(TARGET): $(OBJS) | $(BUILD_DIR)
+	$(CXX) $(OBJS) $(LDFLAGS) -o $@
+
+# Compile
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# Include dependency files
+-include $(OBJS:.o=.d)
+
+# Create build directory if it doesn't exist
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
+
+# Clean
+clean:
+	rm -rf $(BUILD_DIR)
+
+# Run
+run: $(TARGET)
+	./$(TARGET)
+
+.PHONY: all clean run

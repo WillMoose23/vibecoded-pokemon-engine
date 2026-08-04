@@ -1,0 +1,14 @@
+{
+  "playerSpeciesKey": "Squirtle",
+  "viewTilesW": 30,
+  "viewTilesH": 30,
+  "playerTilesW": 2,
+  "playerTilesH": 2,
+  "playerSprite": "src/Graphics/Characters/trainer_red.png",
+  "playerWalkFrameMs": 90,
+  "playerDrawOffsetTilesX": 1,
+  "playerCollisionOffX": 0,
+  "playerCollisionOffY": 1,
+  "playerCollisionW": 1,
+  "playerCollisionH": 1
+}

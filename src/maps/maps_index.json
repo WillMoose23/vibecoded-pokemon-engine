@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "maps": [
+    {
+      "id": "Cherry_Town",
+      "name": "Cherry_Town"
+    },
+    {
+      "id": "Maple_Town",
+      "name": "Maple_Town"
+    },
+    {
+      "id": "route_2",
+      "name": "route_2"
+    },
+    {
+      "id": "tree_map_border",
+      "name": "tree_map_border"
+    }
+  ]
+}

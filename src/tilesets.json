@@ -1,0 +1,336 @@
+{
+  "version": 1,
+  "tilesets": [
+    {
+      "id": "boat",
+      "image": "src/Graphics/Tilesets/Boat.png",
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "margin": 0,
+      "spacing": 0,
+      "columns": 0
+    },
+    {
+      "id": "bike_shop",
+      "image": "src/Graphics/Tilesets/Bike shop interior.png",
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "margin": 0,
+      "spacing": 0,
+      "columns": 0
+    },
+    {
+      "id": "distortion_world",
+      "image": "src/Graphics/Tilesets/distortion_world.png",
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "margin": 0,
+      "spacing": 0,
+      "columns": 0
+    },
+    {
+      "id": "Caves_2",
+      "image": "src/Graphics/Tilesets/Caves_2.png",
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "margin": 0,
+      "spacing": 0,
+      "columns": 0
+    },
+    {
+      "id": "Department_store_interior",
+      "image": "src/Graphics/Tilesets/Department_store_interior.png",
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "margin": 0,
+      "spacing": 0,
+      "columns": 0
+    },
+    {
+      "id": "ekat_tilesets_2",
+      "image": "src/Graphics/Tilesets/ekat_tilesets_2.png",
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "margin": 0,
+      "spacing": 0,
+      "columns": 0
+    },
+    {
+      "id": "Interior_general",
+      "image": "src/Graphics/Tilesets/Interior_general.png",
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "margin": 0,
+      "spacing": 0,
+      "columns": 0
+    },
+    {
+      "id": "Dungeon_cave_2",
+      "image": "src/Graphics/Tilesets/Dungeon_cave_2.png",
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "margin": 0,
+      "spacing": 0,
+      "columns": 0
+    },
+    {
+      "id": "Dungeon_forest",
+      "image": "src/Graphics/Tilesets/Dungeon_forest.png",
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "margin": 0,
+      "spacing": 0,
+      "columns": 0
+    },
+    {
+      "id": "Outside_General",
+      "image": "src/Graphics/Tilesets/Outside_2.png",
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "margin": 0,
+      "spacing": 0,
+      "columns": 0
+    },
+    {
+      "id": "Ekat_s_Mega_Gen_3_Set",
+      "image": "src/Graphics/Tilesets/Ekat_s_Mega_Gen_3_Set.png",
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "margin": 0,
+      "spacing": 0,
+      "columns": 0
+    },
+    {
+      "id": "Sinnoh_Tile_Dump",
+      "image": "src/Graphics/Tilesets/Sinnoh_Tile_Dump.png",
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "margin": 0,
+      "spacing": 0,
+      "columns": 0
+    },
+    {
+      "id": "Mart_interior",
+      "image": "src/Graphics/Tilesets/Mart_interior.png",
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "margin": 0,
+      "spacing": 0,
+      "columns": 0
+    },
+    {
+      "id": "Museum_interior",
+      "image": "src/Graphics/Tilesets/Museum_interior.png",
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "margin": 0,
+      "spacing": 0,
+      "columns": 0
+    },
+    {
+      "id": "Haunted_House_2",
+      "image": "src/Graphics/Tilesets/Haunted_House_2.png",
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "margin": 0,
+      "spacing": 0,
+      "columns": 0
+    },
+    {
+      "id": "Underground_path",
+      "image": "src/Graphics/Tilesets/Underground_path.png",
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "margin": 0,
+      "spacing": 0,
+      "columns": 0
+    },
+    {
+      "id": "Underwater_2",
+      "image": "src/Graphics/Tilesets/Underwater_2.png",
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "margin": 0,
+      "spacing": 0,
+      "columns": 0
+    },
+    {
+      "id": "costal_cave_2",
+      "image": "src/Graphics/Tilesets/costal_cave_2.png",
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "margin": 0,
+      "spacing": 0,
+      "columns": 0
+    },
+    {
+      "id": "Brick_City",
+      "image": "src/Graphics/Tilesets/Brick_City.png",
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "margin": 0,
+      "spacing": 0,
+      "columns": 0
+    },
+    {
+      "id": "dojo_2",
+      "image": "src/Graphics/Tilesets/dojo_2.png",
+      "tileWidth": 16,
+      "tileHeight": 16,
+      "margin": 0,
+      "spacing": 0,
+      "columns": 0
+    }
+  ],
+  "editorTilesetFolders": {
+    "version": 1,
+    "folders": [
+      {
+        "id": "fcb0ddb8c727",
+        "name": "Test",
+        "color": [
+          80,
+          110,
+          140
+        ]
+      },
+      {
+        "id": "a23c69bb9535",
+        "name": "Caves",
+        "color": [
+          80,
+          110,
+          140
+        ]
+      },
+      {
+        "id": "91c81ade9b2e",
+        "name": "Ekat Tiles",
+        "color": [
+          80,
+          110,
+          140
+        ]
+      }
+    ],
+    "order": [
+      {
+        "kind": "folder",
+        "id": "fcb0ddb8c727"
+      },
+      {
+        "kind": "tileset",
+        "id": "Department_store_interior",
+        "in_folder": "fcb0ddb8c727"
+      },
+      {
+        "kind": "tileset",
+        "id": "boat",
+        "in_folder": "fcb0ddb8c727"
+      },
+      {
+        "kind": "tileset",
+        "id": "Interior_general",
+        "in_folder": "fcb0ddb8c727"
+      },
+      {
+        "kind": "tileset",
+        "id": "bike_shop",
+        "in_folder": "fcb0ddb8c727"
+      },
+      {
+        "kind": "tileset",
+        "id": "Outside_General",
+        "in_folder": "fcb0ddb8c727"
+      },
+      {
+        "kind": "tileset",
+        "id": "Sinnoh_Tile_Dump",
+        "in_folder": "fcb0ddb8c727"
+      },
+      {
+        "kind": "tileset",
+        "id": "Mart_interior",
+        "in_folder": "fcb0ddb8c727"
+      },
+      {
+        "kind": "tileset",
+        "id": "Museum_interior",
+        "in_folder": "fcb0ddb8c727"
+      },
+      {
+        "kind": "folder",
+        "id": "a23c69bb9535"
+      },
+      {
+        "kind": "tileset",
+        "id": "Caves_2",
+        "in_folder": "a23c69bb9535"
+      },
+      {
+        "kind": "tileset",
+        "id": "distortion_world",
+        "in_folder": "a23c69bb9535"
+      },
+      {
+        "kind": "tileset",
+        "id": "Dungeon_forest",
+        "in_folder": "a23c69bb9535"
+      },
+      {
+        "kind": "tileset",
+        "id": "Dungeon_cave_2",
+        "in_folder": "a23c69bb9535"
+      },
+      {
+        "kind": "tileset",
+        "id": "costal_cave_2",
+        "in_folder": "a23c69bb9535"
+      },
+      {
+        "kind": "tileset",
+        "id": "Underground_path",
+        "in_folder": "a23c69bb9535"
+      },
+      {
+        "kind": "tileset",
+        "id": "Underwater_2",
+        "in_folder": "a23c69bb9535"
+      },
+      {
+        "kind": "folder",
+        "id": "91c81ade9b2e"
+      },
+      {
+        "kind": "tileset",
+        "id": "ekat_tilesets_2",
+        "in_folder": "91c81ade9b2e"
+      },
+      {
+        "kind": "tileset",
+        "id": "Ekat_s_Mega_Gen_3_Set",
+        "in_folder": "91c81ade9b2e"
+      },
+      {
+        "kind": "tileset",
+        "id": "dojo_2",
+        "in_folder": "91c81ade9b2e"
+      },
+      {
+        "kind": "tileset",
+        "id": "Brick_City",
+        "in_folder": "91c81ade9b2e"
+      },
+      {
+        "kind": "tileset",
+        "id": "Haunted_House_2",
+        "in_folder": "91c81ade9b2e"
+      }
+    ],
+    "collapsed": [
+      "91c81ade9b2e",
+      "a23c69bb9535",
+      "fcb0ddb8c727"
+    ]
+  }
+}

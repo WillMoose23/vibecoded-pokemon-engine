@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "script_1": [
+    {
+      "set_flag": {
+        "name": "library_heal_called"
+      }
+    }
+  ]
+}

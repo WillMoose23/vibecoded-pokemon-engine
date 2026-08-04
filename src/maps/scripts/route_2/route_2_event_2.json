@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "actions": [
+    {
+      "op": "show_message",
+      "args": {
+        "text": "Hello! Press Q to close."
+      }
+    }
+  ]
+}

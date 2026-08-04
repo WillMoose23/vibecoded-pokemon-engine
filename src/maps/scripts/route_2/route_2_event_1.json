@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "map": "route_2",
+  "script_1": [
+    {
+      "lock_player": {}
+    },
+    {
+      "show_message": {
+        "text": "Hello! Press Q to close."
+      }
+    },
+    {
+      "show_message": {
+        "text": "This is a test"
+      }
+    },
+    {
+      "set_player_facing": {
+        "dir": "down"
+      }
+    },
+    {
+      "warp_player": {
+        "mapId": "Maple_Town",
+        "x": 10,
+        "y": 10
+      }
+    },
+    {
+      "unlock_player": {}
+    }
+  ],
+  "script_2": [],
+  "subflows": {
+    "subflow_1": [
+      {
+        "show_message": {
+          "text": "Hello! Press Q to close."
+        }
+      },
+      {
+        "move_camera": {
+          "direction": "east",
+          "steps": 1,
+          "speed": 0
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "flags": [
+    {
+      "name": "my_subflow",
+      "initial": false,
+      "description": ""
+    }
+  ],
+  "variables": [
+    {
+      "name": "my_subflow",
+      "type": "int",
+      "initial": 0,
+      "description": ""
+    }
+  ]
+}

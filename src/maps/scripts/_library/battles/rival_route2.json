@@ -1,0 +1,15 @@
+{
+  "id": "rival_route2",
+  "music": "",
+  "background": "example",
+  "outcomeMode": "normal",
+  "scriptedLossTurns": 0,
+  "trainers": [
+    {
+      "party": [
+        {"species": "Charmander", "level": 12},
+        {"species": "Pidgey", "level": 10}
+      ]
+    }
+  ]
+}

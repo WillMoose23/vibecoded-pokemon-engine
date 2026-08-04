@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "actions": [
+    {
+      "op": "lock_player",
+      "args": {}
+    },
+    {
+      "op": "show_message",
+      "args": {
+        "text": "Demo event (FEATURE-MAP-030). Press Q again to advance."
+      }
+    },
+    {
+      "op": "wait_frames",
+      "args": {
+        "n": 1
+      }
+    },
+    {
+      "op": "show_message",
+      "args": {
+        "text": "Goodbye!"
+      }
+    },
+    {
+      "op": "unlock_player",
+      "args": {}
+    }
+  ]
+}
