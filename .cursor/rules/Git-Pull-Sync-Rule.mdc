@@ -1,0 +1,94 @@
+---
+description: Pull and sync latest code from GitHub (development default). Applies when pulling or updating from remote.
+alwaysApply: true
+---
+
+# Git Pull — Sync From GitHub
+
+## Trigger phrases
+
+Activate when the user says: **pull**, **sync from GitHub**, **get latest**, **update from remote**, or similar.
+
+Default target branch is **`development`**. Pull **`main`** only when they ask for stable/production.
+
+Pair with **Git-Push-Development-Rule** when they ask to sync both directions.
+
+---
+
+## Policy
+
+- **Default sync branch: `development`**
+- **`main`** only when user requests production/stable baseline
+- **Never discard local work silently** — check `git status` before and after
+
+**Remote:** `origin` → `https://github.com/WillMoose23/vibecoded-pokemon-engine.git`
+
+---
+
+## Pre-pull checks (parallel)
+
+```bash
+cd /Users/rheyn/Desktop/project
+git status
+git branch -vv
+git remote -v
+git fetch origin
+```
+
+Report: current branch, uncommitted changes, ahead/behind vs `origin`.
+
+**Uncommitted changes:** stash or commit first; ask user if unclear.
+
+---
+
+## Pull development (default)
+
+```bash
+git fetch origin
+git checkout development
+git pull origin development --no-rebase
+```
+
+If `origin/development` does not exist, tell the user and offer to create it.
+
+---
+
+## Pull main (user requested only)
+
+```bash
+git fetch origin
+git checkout main
+git pull origin main --no-rebase
+```
+
+Return to `development` afterward unless user wants to stay on `main`.
+
+---
+
+## After pull
+
+1. `git status` — summarize commits/files changed
+2. If code changed, run:
+   ```bash
+   make test
+   python3 -m unittest discover -s tests -q
+   ```
+3. On merge conflicts: list files and stop; resolve with user
+
+---
+
+## Sync both branches (optional)
+
+When user asks to sync everything:
+
+```bash
+git fetch origin
+git checkout main && git pull origin main --no-rebase
+git checkout development && git pull origin development --no-rebase
+```
+
+---
+
+## Forbidden without explicit user request
+
+- `git reset --hard`, `git clean -fd`, force-push, auto-merge to `main`, open PRs without asking

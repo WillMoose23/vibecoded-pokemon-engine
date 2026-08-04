@@ -1,5 +1,33 @@
 # Issue tracker
 
+## IMPROVEMENT-MAP-095
+
+```
+ID: IMPROVEMENT-MAP-095
+TYPE: IMPROVEMENT
+TITLE: Git workflow Cursor rules — push to development, pull sync
+
+DESCRIPTION:
+Add project Cursor rules so the agent consistently pushes documented work to
+origin/development (never main) and pulls/syncs from GitHub with development as
+the default integration branch. User merges development → main after review.
+
+EXPECTED_BEHAVIOR:
+- Git-Push-Development-Rule: pre-push gates (docs, tracker, tests), commit on
+  development, push origin/development, provide compare URL for merge review.
+- Git-Pull-Sync-Rule: fetch/pull development by default; pull main only on request;
+  never hard-reset local work without consent.
+- .cursor/rules/ versioned in git (.gitignore allows rules only).
+
+SCOPE:
+.cursor/rules/Git-Push-Development-Rule.mdc,
+.cursor/rules/Git-Pull-Sync-Rule.mdc, .gitignore
+
+PRIORITY: MEDIUM
+STATUS: DONE
+ASSIGNED_TO: Cursor
+```
+
 ## FEATURE-MAP-097
 
 ```
