@@ -1,5 +1,31 @@
 # Issue tracker
 
+## IMPROVEMENT-MAP-096
+
+```
+ID: IMPROVEMENT-MAP-096
+TYPE: IMPROVEMENT
+TITLE: Version-control Cursor plans on development branch
+
+DESCRIPTION:
+Cursor plan files (~/.cursor/plans/*.plan.md) were not backed up in git. Add
+.cursor/plans/ in the repo, sync tooling, and a pre-push gate so plans are
+committed to origin/development with other documented work.
+
+EXPECTED_BEHAVIOR:
+- tools/sync_cursor_plans.py copies ~/.cursor/plans → .cursor/plans/
+- .gitignore tracks .cursor/plans/ (rest of .cursor/ stays ignored)
+- Git-Push-Development-Rule runs sync before every push
+
+SCOPE:
+.cursor/plans/, tools/sync_cursor_plans.py, .gitignore,
+.cursor/rules/Git-Push-Development-Rule.mdc, docs/tools_doc.md
+
+PRIORITY: MEDIUM
+STATUS: DONE
+ASSIGNED_TO: Cursor
+```
+
 ## IMPROVEMENT-MAP-095
 
 ```
