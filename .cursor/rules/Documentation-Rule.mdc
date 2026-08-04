@@ -1,0 +1,279 @@
+---
+description: 
+alwaysApply: true
+---
+
+```
+# Cursor Documentation Rules (C++ Source + Tools)
+
+## OVERVIEW
+All source files, methods, and tools MUST be thoroughly documented.
+Documentation is NOT optional. Any code change without documentation updates is invalid.
+
+---
+
+# SOURCE CODE DOCUMENTATION
+
+## File Location
+/docs/source_doc.md
+
+---
+
+## When to Update
+- After ANY code change
+- After adding/removing methods
+- After refactoring
+- No task is complete until documentation is updated
+
+---
+
+## File-Level Documentation (Required)
+
+FILE: <filename>
+
+PURPOSE:
+What this file is responsible for
+
+DEPENDENCIES:
+Headers, classes, or systems it relies on
+
+KEY COMPONENTS:
+List of major classes/functions
+
+NOTES:
+Important design decisions or constraints
+
+---
+
+## Class Documentation (Required if applicable)
+
+CLASS: <name>
+
+PURPOSE:
+What the class represents
+
+MEMBERS:
+- variable: type — purpose
+
+METHODS:
+List of key methods
+
+INVARIANTS:
+Conditions that must always be true
+
+---
+
+## Method / Function Documentation (Required)
+
+FUNCTION: <name>
+
+SIGNATURE:
+<full function signature>
+
+DESCRIPTION:
+What it does (clear and direct)
+
+PARAMETERS:
+- name: type — purpose
+
+RETURNS:
+type — what is returned
+
+SIDE EFFECTS:
+State changes, I/O, mutations
+
+ERROR HANDLING:
+What happens on failure / edge cases
+
+DEPENDENCIES:
+Other functions/classes used
+
+---
+
+## Writing Rules
+- Be precise and technical
+- No vague phrases (e.g., “handles stuff”)
+- Explain intent, not obvious syntax
+- Use exact names from code
+- Keep formatting consistent
+- One section per file, cleanly grouped
+
+---
+
+# TOOLS DOCUMENTATION
+
+## File Location
+/docs/tools_doc.md
+
+---
+
+## What Counts as a Tool
+- Build scripts
+- CLI utilities
+- Python/bash scripts
+- Automation tools
+- Internal helper programs
+
+---
+
+## When to Update
+- After any logic change
+- After changing CLI arguments
+- After changing outputs
+- No tool change is complete without documentation
+
+---
+
+## Tool-Level Documentation (Required)
+
+TOOL: <name>
+
+PURPOSE:
+What the tool does
+
+USAGE:
+Command or how to run it
+
+INPUT:
+Required inputs (args, files, flags)
+
+OUTPUT:
+What it produces
+
+DEPENDENCIES:
+External libraries, binaries, environment
+
+SIDE EFFECTS:
+Files modified, system changes
+
+ERROR HANDLING:
+Failure behavior
+
+NOTES:
+Constraints, limitations
+
+---
+
+## Tool Internal Functions (If Needed)
+
+FUNCTION: <name>
+
+DESCRIPTION:
+What it does
+
+INPUT:
+Parameters
+
+OUTPUT:
+Return values
+
+SIDE EFFECTS:
+Any state or file changes
+
+---
+
+# GLOBAL ENFORCEMENT RULES (CRITICAL)
+
+- Documentation is mandatory
+- No undocumented code changes
+- No missing sections
+- No vague descriptions
+- No combining multiple responsibilities in one entry
+
+# INDENTATION RULES (CRITICAL)
+
+## General Format (source_doc / tools_doc)
+
+- **Anchor lines** (`FILE: <path>` in `docs/source_doc.md`, `TOOL: <path>` in `docs/tools_doc.md`) are **left-aligned at column 0** (no leading spaces).
+- **Everything that belongs to that entry** (from the first blank line after the anchor until the line before the next anchor) is indented with **one extra 4-space block** from column 0. Concretely: each such line starts with exactly **4 spaces** more than it would in a flat layout, so readers see the file/tool name at the margin and the whole entry nested beneath it.
+- **Within** that nested block, keep **relative** depth: section labels (`PURPOSE:`, `FUNCTION:`, `DESCRIPTION:`, etc.) start at **4 spaces** from column 0. A normal value line starts at **8 spaces**. Bullets under `DEPENDENCIES:`, `KEY COMPONENTS:`, `MEMBERS:`, `INPUT:`, and similar “dense list” fields use **12 spaces** (legacy double indent inside the entry). Hyphen continuation lines under `PARAMETERS:` use **8 spaces** when they are written as wrapped parameter rows (same as other 8-space body lines in this repository).
+- **No tabs** — spaces only.
+
+---
+
+## Correct Structure Example (inside one `FILE:` block)
+
+FILE: example.cpp
+
+    PURPOSE:
+        One-line summary of the file.
+
+    DEPENDENCIES:
+            - other_header.h
+
+    FUNCTION: calculateDamage
+
+    SIGNATURE:
+        int calculateDamage(const Pokemon& attacker, const Pokemon& defender)
+
+    DESCRIPTION:
+        Calculates damage based on stats, type, and modifiers
+
+    PARAMETERS:
+        - attacker: Pokemon — attacking unit
+        - defender: Pokemon — defending unit
+
+    RETURNS:
+        int — final damage value
+
+    SIDE EFFECTS:
+        None
+
+    ERROR HANDLING:
+        Returns 0 if invalid stats detected
+
+    DEPENDENCIES:
+            - TypeChart
+            - RNG
+
+---
+
+## Rules
+
+- NEVER put values on the same line as the label
+  Wrong:
+  SIGNATURE: int main()
+  Right:
+  SIGNATURE:
+        int main()
+
+- NEVER dedent content inside a `FILE:` / `TOOL:` block to column 0 except the anchor line itself
+- Multi-line values keep the same indentation as the first value line
+
+---
+
+## Multi-line Value Example
+
+FILE: runtime.cpp
+
+    DESCRIPTION:
+        Creates the game runtime object and runs the main loop.
+        Handles initialization and shutdown of core systems.
+
+---
+
+## Empty Fields
+
+If a section has no content:
+
+FILE: stub.cpp
+
+    PARAMETERS:
+        None
+
+---
+
+## Consistency Enforcement
+
+- Indentation must be identical across ALL files
+- No tabs allowed — spaces only
+- Misaligned documentation is considered invalid
+- Cursor MUST fix indentation before completing a task
+
+Cursor MUST:
+- Update /docs/source_doc.md for ANY source change
+- Update /docs/tools_doc.md for ANY tool change
+
+If documentation is outdated or missing:
+STOP and fix documentation before continuing
+```

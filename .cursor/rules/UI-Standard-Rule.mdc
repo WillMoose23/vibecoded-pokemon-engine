@@ -1,0 +1,231 @@
+```
+# UI Modal Standard Rule
+
+## Overview
+
+Every new or reworked editor modal in this project MUST follow the `WildEncounterModal`
+standard established in `tools/wild_encounter_modal.py`. This rule is non-negotiable.
+Non-compliant implementations will be flagged and must be brought into compliance before
+the task is considered complete.
+
+---
+
+## Required Class Structure
+
+- Each modal is a **standalone class** in a dedicated file under `tools/`.
+- The class receives the `MapEditor` instance as `ed` at construction.
+- The class is instantiated in `MapEditor.__init__` and stored as `self.<name>_modal`.
+
+Example:
+```python
+# tools/my_modal.py
+class MyModal:
+    def __init__(self, editor: "MapEditor") -> None:
+        self.ed = editor
+        self.open = False
+        ...
+
+# tools/map_editor.py  (in __init__)
+self.my_modal = MyModal(self)
+```
+
+---
+
+## Required State Fields
+
+Every modal MUST declare these fields in `__init__`:
+
+```python
+self.open: bool = False
+self.panel_rect: pygame.Rect = pygame.Rect(0, 0, 1, 1)
+
+# Drag/resize/move
+self._drag_mode: str = "none"          # "none" | "resize_br" | "resize_bl" | "move"
+self._drag_ref: tuple[int, int] = (0, 0)
+self._resize_corner_br: pygame.Rect = pygame.Rect(0, 0, 16, 16)
+self._resize_corner_bl: pygame.Rect = pygame.Rect(0, 0, 16, 16)
+self._title_bar: pygame.Rect = pygame.Rect(0, 0, 1, 1)
+
+# Panel size/position persistence (None = auto-fit; set = user-chosen; persists across close/reopen)
+self._panel_override: pygame.Rect | None = None
+```
+
+`open_modal()` MUST reset `_drag_mode = "none"` but MUST NOT reset `_panel_override`
+(the user's chosen size/position persists within the session).
+
+---
+
+## Required `draw()` Implementation
+
+### Canvas
+```python
+canvas = ed.screen.get_rect()   # ALWAYS use full window, never map_viewport_rect
+dim = pygame.Surface((canvas.w, canvas.h), pygame.SRCALPHA)
+dim.fill((8, 12, 16, 210))
+ed.screen.blit(dim, canvas.topleft)
+```
+
+### Panel sizing — size clamp BEFORE position clamp
+```python
+if self._panel_override is not None:
+    panel = self._panel_override.copy()
+else:
+    panel = pygame.Rect(0, 0, min(1100, canvas.w - 24), min(720, canvas.h - 24))
+    panel.center = canvas.center
+
+# 1. Clamp SIZE first (prevents overflow when window shrinks)
+panel.w = max(640, min(panel.w, canvas.w - 8))
+panel.h = max(480, min(panel.h, canvas.h - 8))
+
+# 2. Then clamp POSITION
+panel.x = max(canvas.x + 4, min(panel.x, canvas.right - panel.w - 4))
+panel.y = max(canvas.y + 4, min(panel.y, canvas.bottom - panel.h - 4))
+self.panel_rect = panel
+```
+
+Minimum panel size: **640 × 480**. This minimum MUST be enforced in all resize clamps.
+
+### Title bar
+
+The title bar MUST be the full header strip minus the close button area, and MUST show
+five grip dots to communicate draggability:
+
+```python
+head_h = 36
+self._title_bar = pygame.Rect(panel.x, panel.y, panel.w - 80, head_h)
+for i in range(5):
+    gx = panel.centerx - 20 + i * 10
+    pygame.draw.circle(ed.screen, (70, 130, 100), (gx, panel.y + head_h // 2), 2)
+```
+
+### Required header buttons
+
+Every modal MUST render a **Close** button. Sub-modals that can be reached from a
+launcher MUST also render a **← Back** button and a **Help** button in the header:
+
+```python
+self.close_btn = pygame.Rect(panel.right - 72, panel.y + 6, 60, 26)
+self._back_btn  = pygame.Rect(panel.right - 136, panel.y + 6, 56, 26)   # sub-modals
+self._help_btn  = pygame.Rect(panel.right - 200, panel.y + 6, 56, 26)   # sub-modals
+```
+
+### Resize grip triangles (drawn last, over all content)
+
+```python
+# Bottom-right
+self._resize_corner_br = pygame.Rect(panel.right - 16, panel.bottom - 16, 16, 16)
+pygame.draw.polygon(screen, (90, 160, 120), [
+    (panel.right - 2,  panel.bottom - 14),
+    (panel.right - 2,  panel.bottom - 2),
+    (panel.right - 14, panel.bottom - 2),
+])
+
+# Bottom-left
+self._resize_corner_bl = pygame.Rect(panel.x, panel.bottom - 16, 16, 16)
+pygame.draw.polygon(screen, (90, 160, 120), [
+    (panel.x + 2,  panel.bottom - 14),
+    (panel.x + 2,  panel.bottom - 2),
+    (panel.x + 14, panel.bottom - 2),
+])
+```
+
+---
+
+## Required Input Handlers
+
+Every modal MUST implement:
+
+| Method | Signature |
+|--------|-----------|
+| `handle_mouse_down` | `(mx, my, button) -> bool` |
+| `handle_mouse_up` | `(mx, my, button) -> bool` |
+| `handle_mouse_motion` | `(mx, my) -> bool` |
+| `handle_wheel` | `(mx, my, y) -> bool` |
+| `handle_keydown` | `(event) -> bool` |
+
+All handlers return `True` when the event is consumed (preventing map editor from seeing it).
+
+### Drag mode handling in `handle_mouse_down`
+
+```python
+if self._resize_corner_br.collidepoint(mx, my) and button == 1:
+    self._drag_mode = "resize_br"
+    self._drag_ref = (self.panel_rect.x, self.panel_rect.y)
+    return True
+if self._resize_corner_bl.collidepoint(mx, my) and button == 1:
+    self._drag_mode = "resize_bl"
+    self._drag_ref = (self.panel_rect.right, self.panel_rect.y)
+    return True
+if self._title_bar.collidepoint(mx, my) and button == 1:
+    self._drag_mode = "move"
+    self._drag_ref = (mx - self.panel_rect.x, my - self.panel_rect.y)
+    return True
+```
+
+### Drag mode handling in `handle_mouse_motion`
+
+```python
+if self._drag_mode == "resize_br":
+    ax, ay = self._drag_ref
+    self._panel_override = pygame.Rect(ax, ay, max(640, mx - ax), max(480, my - ay))
+    return True
+if self._drag_mode == "resize_bl":
+    right, ay = self._drag_ref
+    new_x = min(mx, right - 640)
+    self._panel_override = pygame.Rect(new_x, ay, right - new_x, max(480, my - ay))
+    return True
+if self._drag_mode == "move":
+    ox, oy = self._drag_ref
+    self._panel_override = pygame.Rect(mx - ox, my - oy, self.panel_rect.w, self.panel_rect.h)
+    return True
+```
+
+### `handle_mouse_up`
+
+```python
+self._drag_mode = "none"
+```
+
+---
+
+## Input Routing in `map_editor.py`
+
+The map editor MUST route input to the modal before processing its own input:
+
+```python
+# In the MOUSEWHEEL handler
+if self.my_modal.open:
+    if self.my_modal.handle_wheel(mx, my, event.y):
+        continue
+
+# In the MOUSEMOTION handler
+if self.my_modal.open:
+    self.my_modal.handle_mouse_motion(mx, my)
+
+# In the MOUSEBUTTONDOWN handler
+if self.my_modal.open:
+    if self.my_modal.handle_mouse_down(mx, my, event.button):
+        continue
+
+# In the MOUSEBUTTONUP handler
+if self.my_modal.open:
+    if self.my_modal.handle_mouse_up(mx, my, event.button):
+        continue
+
+# In the KEYDOWN handler
+if self.my_modal.open:
+    if self.my_modal.handle_keydown(event):
+        continue
+```
+
+Map editor tile-painting and other editing input MUST be blocked while the modal is open.
+
+---
+
+## Enforcement
+
+- Any PR or agent task that introduces a new or reworked modal that does not comply with
+  this standard MUST fix the violations before marking the task DONE.
+- The reference implementation is `tools/wild_encounter_modal.py`.
+- Partial compliance (e.g. missing BL grip, wrong canvas, fixed panel size) is not acceptable.
+```

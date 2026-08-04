@@ -1,0 +1,221 @@
+---
+description: 
+alwaysApply: true
+---
+
+# Bug & Feature Logging Rules for Cursor
+
+## 1. Always Create a Record
+
+* Every bug or feature request MUST be logged before implementation
+* Never implement changes without a corresponding log entry
+* If unclear whether it’s a bug or feature → log it first, classify later
+
+---
+
+## 2. Use Standard Categories
+
+Each entry MUST be one of:
+
+* `BUG` → Something broken or incorrect
+* `FEATURE` → New functionality
+* `IMPROVEMENT` → Enhancement to existing behavior
+* `REFACTOR` → Code change with no behavior change
+
+---
+
+## 3. Required Fields (Strict Format)
+
+Every log entry MUST include:
+
+```
+ID:
+TYPE:
+TITLE:
+DESCRIPTION:
+STEPS_TO_REPRODUCE: (BUG only)
+EXPECTED_BEHAVIOR:
+ACTUAL_BEHAVIOR: (BUG only)
+SCOPE:
+PRIORITY:
+STATUS:
+ASSIGNED_TO:
+```
+
+---
+
+## 4. Writing Rules
+
+### Titles
+
+* Short, specific, and actionable
+* Bad: `Fix issue`
+* Good: `Fix null pointer crash in Battle::calculateDamage`
+
+### Descriptions
+
+* Explain **what** and **why**, not just what to change
+* Avoid vague wording like “optimize” or “improve”
+
+---
+
+## 5. Bug Rules
+
+For every `BUG`:
+
+* MUST include reproducible steps
+* MUST include expected vs actual behavior
+* MUST include environment if relevant (OS, compiler, etc.)
+
+Example:
+
+```
+TYPE: BUG
+TITLE: Crash when player has no Pokémon
+STEPS_TO_REPRODUCE:
+1. Start battle with empty party
+2. Call startBattle()
+
+EXPECTED_BEHAVIOR:
+Graceful error or validation
+
+ACTUAL_BEHAVIOR:
+Segmentation fault
+
+PRIORITY: HIGH
+```
+
+---
+
+## 6. Feature Rules
+
+For every `FEATURE`:
+
+* MUST define success criteria
+* MUST define constraints
+* MUST avoid ambiguity
+
+Example:
+
+```
+TYPE: FEATURE
+TITLE: Add critical hit system
+
+DESCRIPTION:
+Implement Pokémon-style critical hit mechanic
+
+EXPECTED_BEHAVIOR:
+- Critical hits deal 1.5x damage
+- Trigger chance is configurable
+
+SCOPE:
+Battle system only
+```
+
+---
+
+## 7. Priority System (Strict)
+
+Only use:
+
+* `LOW` → Cosmetic / minor
+* `MEDIUM` → Non-critical improvement
+* `HIGH` → Important functionality
+* `CRITICAL` → Crashes, data loss, blocking issues
+
+---
+
+## 8. Status Lifecycle
+
+Each item MUST follow:
+
+```
+OPEN → IN_PROGRESS → REVIEW → DONE
+```
+
+Optional:
+
+```
+BLOCKED
+CANCELLED
+```
+
+---
+
+## 9. One Issue = One Responsibility
+
+* Do NOT combine multiple bugs/features into one entry
+* If multiple problems exist → split them
+
+---
+
+## 10. Cursor Behavior Rules
+
+When working with Cursor:
+
+* Always reference the `ID` in code changes
+* Always update `STATUS` when progressing
+* Never silently fix bugs without logging them
+* If Cursor suggests a change:
+
+  * Convert it into a log entry FIRST
+  * Then implement
+
+---
+
+## 11. File Organization
+
+Use a structured file like:
+
+```
+/docs
+  bugs.md
+  features.md
+  improvements.md
+```
+
+OR a single file:
+
+```
+/docs/tracker.md
+```
+
+---
+
+## 12. Example Full Entry
+
+```
+ID: BUG-014
+TYPE: BUG
+TITLE: Damage calculation ignores type effectiveness
+
+DESCRIPTION:
+Damage formula does not apply type multipliers
+
+STEPS_TO_REPRODUCE:
+1. Fire attack vs Grass Pokémon
+2. Observe damage
+
+EXPECTED_BEHAVIOR:
+Damage should be increased (2x)
+
+ACTUAL_BEHAVIOR:
+Normal damage applied
+
+SCOPE:
+Battle damage system
+
+PRIORITY: HIGH
+STATUS: OPEN
+ASSIGNED_TO: Cursor
+```
+
+---
+
+## 13. Non-Negotiables
+
+* No vague issues
+* No missing fields
+* No implementation without logging
+* No duplicate entries
+* No mixing responsibilities
