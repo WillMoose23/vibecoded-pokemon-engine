@@ -1,0 +1,94 @@
+---
+description: Commit and push documented work to origin/development only (never main). Applies when pushing or publishing changes to GitHub.
+alwaysApply: true
+---
+
+# Git Push — Development Branch Only
+
+## Trigger phrases
+
+Activate this workflow when the user says: **push**, **commit and push**, **publish to GitHub**, **ship to development**, **sync up**, or similar.
+
+Pair with **Git-Pull-Sync-Rule** when they ask to sync both directions.
+
+---
+
+## Policy
+
+- **Never push directly to `main`.** All agent pushes go to **`development`**.
+- **`main` is merge-only** — the user reviews and merges `development` → `main` on GitHub after approval.
+- **Only push documented work** — undocumented code changes are not ready to push.
+
+**Remote:** `origin` → `https://github.com/WillMoose23/vibecoded-pokemon-engine.git`
+
+---
+
+## Pre-push gate (all must pass)
+
+1. **Documentation** (Documentation-Rule): `/docs/source_doc.md` and/or `/docs/tools_doc.md` updated for changed code.
+2. **Tracker** (Logging-Rule): `/docs/tracker.md` entries exist; `STATUS` is accurate (e.g. `REVIEW` or `DONE`).
+3. **Tests:**
+   ```bash
+   make test
+   python3 -m unittest discover -s tests -q
+   ```
+4. **Cursor plans & skills** — sync into the repo before push:
+   ```bash
+   python3 tools/sync_cursor_backup.py
+   ```
+   Commit changes under `.cursor/plans/` and `.cursor/skills/`.
+5. **No secrets** — never stage `.env`, tokens, or ignored caches (see `.gitignore`).
+
+If any gate fails, fix or report blockers; **do not push**.
+
+---
+
+## Branch workflow
+
+```bash
+cd /Users/rheyn/Desktop/project
+git fetch origin
+git checkout development
+git pull origin development --no-rebase
+```
+
+- Never commit on `main` — checkout `development` first.
+- If `origin/development` is missing, create with `git push -u origin development` (one-time).
+
+---
+
+## Commit and push
+
+Run in parallel: `git status`, `git diff`, `git log -3 --oneline`
+
+Then:
+
+```bash
+git add <relevant files>
+git commit -m "$(cat <<'EOF'
+<Why, 1-2 sentences>
+
+Tracker: <ID if applicable>
+EOF
+)"
+git push -u origin development
+git status
+```
+
+---
+
+## After push
+
+Report:
+
+1. Pushed branch: **`development`**
+2. Compare URL: `https://github.com/WillMoose23/vibecoded-pokemon-engine/compare/main...development`
+3. User merges to **`main`** when approved — agent does not merge unless explicitly asked.
+
+---
+
+## Forbidden without explicit user override
+
+- `git push origin main`
+- `git push --force` to `main` or `development`
+- Push with failing tests or missing docs/tracker updates

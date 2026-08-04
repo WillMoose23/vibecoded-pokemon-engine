@@ -1,5 +1,88 @@
 # Issue tracker
 
+# Issue tracker
+
+## IMPROVEMENT-MAP-097
+
+```
+ID: IMPROVEMENT-MAP-097
+TYPE: IMPROVEMENT
+TITLE: Version-control Cursor skills on development branch
+
+DESCRIPTION:
+Extend Cursor workspace backup to include project skills under .cursor/skills/,
+synced from ~/.cursor/skills/, with sync_cursor_skills.py and sync_cursor_backup.py
+orchestrating plans + skills before push.
+
+EXPECTED_BEHAVIOR:
+- tools/sync_cursor_skills.py merges global skill folders into .cursor/skills/
+- tools/sync_cursor_backup.py runs plan + skill sync
+- Git-Push-Development-Rule uses sync_cursor_backup.py
+- Project-only skills (planning-rule, event-script-opcode-docs, etc.) remain in repo
+
+SCOPE:
+.cursor/skills/, tools/sync_cursor_skills.py, tools/sync_cursor_backup.py,
+.gitignore, .cursor/rules/Git-Push-Development-Rule.mdc, docs/tools_doc.md
+
+PRIORITY: MEDIUM
+STATUS: DONE
+ASSIGNED_TO: Cursor
+```
+
+## IMPROVEMENT-MAP-096
+
+```
+ID: IMPROVEMENT-MAP-096
+TYPE: IMPROVEMENT
+TITLE: Version-control Cursor plans on development branch
+
+DESCRIPTION:
+Cursor plan files (~/.cursor/plans/*.plan.md) were not backed up in git. Add
+.cursor/plans/ in the repo, sync tooling, and a pre-push gate so plans are
+committed to origin/development with other documented work.
+
+EXPECTED_BEHAVIOR:
+- tools/sync_cursor_plans.py copies ~/.cursor/plans → .cursor/plans/
+- .gitignore tracks .cursor/plans/ (rest of .cursor/ stays ignored)
+- Git-Push-Development-Rule runs sync before every push
+
+SCOPE:
+.cursor/plans/, tools/sync_cursor_plans.py, .gitignore,
+.cursor/rules/Git-Push-Development-Rule.mdc, docs/tools_doc.md
+
+PRIORITY: MEDIUM
+STATUS: DONE
+ASSIGNED_TO: Cursor
+```
+
+## IMPROVEMENT-MAP-095
+
+```
+ID: IMPROVEMENT-MAP-095
+TYPE: IMPROVEMENT
+TITLE: Git workflow Cursor rules — push to development, pull sync
+
+DESCRIPTION:
+Add project Cursor rules so the agent consistently pushes documented work to
+origin/development (never main) and pulls/syncs from GitHub with development as
+the default integration branch. User merges development → main after review.
+
+EXPECTED_BEHAVIOR:
+- Git-Push-Development-Rule: pre-push gates (docs, tracker, tests), commit on
+  development, push origin/development, provide compare URL for merge review.
+- Git-Pull-Sync-Rule: fetch/pull development by default; pull main only on request;
+  never hard-reset local work without consent.
+- .cursor/rules/ versioned in git (.gitignore allows rules only).
+
+SCOPE:
+.cursor/rules/Git-Push-Development-Rule.mdc,
+.cursor/rules/Git-Pull-Sync-Rule.mdc, .gitignore
+
+PRIORITY: MEDIUM
+STATUS: DONE
+ASSIGNED_TO: Cursor
+```
+
 ## FEATURE-MAP-097
 
 ```

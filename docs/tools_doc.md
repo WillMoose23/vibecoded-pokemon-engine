@@ -287,6 +287,88 @@ TOOL: tools/event_script_schema.py
         `trigger_from_legacy_interaction()`, `normalize_map_event(ev)`, `migrate_script_document(doc, map_id)`,
         and `script_documents_equal(a, b)` for `tools/migrate_map_events.py`.
 
+TOOL: tools/sync_cursor_plans.py
+
+    PURPOSE:
+        IMPROVEMENT-MAP-096: copy Cursor plan files from the global plans directory into the
+        repo-backed `.cursor/plans/` folder so they can be committed to `origin/development`.
+
+    USAGE:
+        `python3 tools/sync_cursor_plans.py`
+        Run before every git push (enforced by Git-Push-Development-Rule).
+
+    INPUT:
+        Source: `~/.cursor/plans/*.plan.md`
+
+    OUTPUT:
+        Destination: `.cursor/plans/*.plan.md` (creates dir if missing). Prints copied/updated/total counts.
+
+    DEPENDENCIES:
+        Python 3 standard library (`pathlib`, `shutil`).
+
+    SIDE EFFECTS:
+        Creates or updates files under `.cursor/plans/`; newer source mtime overwrites repo copy.
+
+    ERROR HANDLING:
+        Exits 1 if `~/.cursor/plans` does not exist; otherwise exit 0.
+
+    NOTES:
+        Repo-only plans not present in the global folder are preserved. See `.cursor/plans/README.md`.
+
+TOOL: tools/sync_cursor_skills.py
+
+    PURPOSE:
+        IMPROVEMENT-MAP-097: copy Cursor skill folders from `~/.cursor/skills/` into
+        `.cursor/skills/` for git backup on `origin/development`.
+
+    USAGE:
+        `python3 tools/sync_cursor_skills.py`
+        Prefer `python3 tools/sync_cursor_backup.py` (plans + skills together).
+
+    INPUT:
+        Source: `~/.cursor/skills/<skill-name>/` (typically contains `SKILL.md`).
+
+    OUTPUT:
+        Destination: `.cursor/skills/<skill-name>/`. Prints copied/updated/folder counts.
+
+    DEPENDENCIES:
+        Python 3 standard library.
+
+    SIDE EFFECTS:
+        Creates/updates skill folders under `.cursor/skills/`; repo-only skills preserved.
+
+    ERROR HANDLING:
+        Exits 1 if `~/.cursor/skills` missing; else exit 0.
+
+    NOTES:
+        Does not sync `~/.cursor/skills-cursor/` (Cursor built-in skills).
+
+TOOL: tools/sync_cursor_backup.py
+
+    PURPOSE:
+        IMPROVEMENT-MAP-097: run plan and skill sync in one step before git push.
+
+    USAGE:
+        `python3 tools/sync_cursor_backup.py`
+
+    INPUT:
+        Invokes `tools/sync_cursor_plans.py` and `tools/sync_cursor_skills.py`.
+
+    OUTPUT:
+        Combined exit code; stdout from each child script.
+
+    DEPENDENCIES:
+        `tools/sync_cursor_plans.py`, `tools/sync_cursor_skills.py`.
+
+    SIDE EFFECTS:
+        Updates `.cursor/plans/` and `.cursor/skills/` in the working tree.
+
+    ERROR HANDLING:
+        Non-zero if either child script fails.
+
+    NOTES:
+        Required by Git-Push-Development-Rule before push to `development`.
+
 TOOL: tools/migrate_map_events.py
 
     PURPOSE:
