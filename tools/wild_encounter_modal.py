@@ -519,16 +519,11 @@ class WildEncounterModal:
                     if self.edit_mode == "patches":
                         idx = ed.wild_encounter[y][x]
                         if idx > 0:
-                            ov = pygame.Surface((cp, cp), pygame.SRCALPHA)
                             is_selected = (x, y) in self._selected_cells
                             act = idx - 1 == ed.active_wild_patch_index
-                            if is_selected:
-                                ov.fill((60, 180, 255, 150))
-                            elif act:
-                                ov.fill((90, 240, 160, 120))
-                            else:
-                                ov.fill((60, 210, 120, 90))
-                            ed.screen.blit(ov, (px, py))
+                            ed.blit_wild_encounter_cell_overlay(
+                                ed.screen, px, py, cp, active=act, selected=is_selected
+                            )
                             # Draw the patch index digit when cells are large enough
                             if cp >= 10:
                                 digit_surf = ed.font_small.render(str(idx), True, (255, 255, 255))

@@ -214,6 +214,10 @@ WORLD_LAYOUT_JSON_PATH = MAPS_DIR / WORLD_LAYOUT_JSON_NAME
 WORLD_UNDO_STACK_MAX = 80
 WORLD_THUMB_CACHE_MAX = 32
 CHAR_FRAME_SURFACE_CACHE_MAX = 64
+SCALED_TILE_CACHE_MAX = 2048
+SHEET_CACHE_MAX = 16
+SESSION_MAP_CACHE_MAX = 16
+WORLD_FIXUP_THROTTLE_MS = 16
 WORLD_THUMB_MAX_EDGE = 220
 WORLD_THUMB_CELL_PX_MIN = 4
 # Thumbnail rasterization only: logical world size is map tiles (FEATURE-MAP-WORLD-008).
@@ -717,8 +721,18 @@ class MapEditor:
         self.tileset_index = 0
         self.active_tileset_id = self.current_tileset_id()
         self.sheet: pygame.Surface | None = None
-        self.sheet_cache: dict[str, pygame.Surface] = {}
+        self.sheet_cache: OrderedDict[str, pygame.Surface] = OrderedDict()
         self.meta_cache: dict[str, dict] = {}
+        self._scaled_tile_cache: OrderedDict[tuple[str, int, int], pygame.Surface] = OrderedDict()
+        self._palette_thumb_cache_key: tuple[int, int, int, int] | None = None
+        self._palette_thumb_surface: pygame.Surface | None = None
+        self._tileset_list_rows_cache: list[dict] | None = None
+        self._tileset_list_rows_cache_token: tuple = ()
+        self._valid_stands_covered_grid: list[bytearray] | None = None
+        self._wild_overlay_cell_px: int = -1
+        self._wild_overlay_active: pygame.Surface | None = None
+        self._wild_overlay_inactive: pygame.Surface | None = None
+        self._world_fixup_last_ms: float = 0.0
         self.columns = 1
         self.map_id = "sample_room"
         self.map_name = "Untitled"
@@ -867,7 +881,7 @@ class MapEditor:
         self._open_map_box_rect: pygame.Rect = pygame.Rect(0, 0, 1, 1)
         self._map_disk_backing_id: str | None = None
         self._map_save_pending_is_save_as: bool = False
-        self._session_map_cache: dict[str, dict] = {}
+        self._session_map_cache: OrderedDict[str, dict] = OrderedDict()
 
         self.world_workspace_open: bool = False
         self.world_nodes: list[dict] = []
@@ -1198,15 +1212,32 @@ class MapEditor:
         self.wild_selected_encounter_row = None
         self._wild_modal_dirty = False
 
-    def _persist_wild_data_for_scope(self, map_id: str) -> None:
-        if not self._wild_modal_dirty:
-            return
-        path = MAPS_DIR / f"{sanitize_map_id(map_id)}.json"
-        try:
-            with open(path, encoding="utf-8") as f:
-                data = json.load(f)
-        except (OSError, json.JSONDecodeError):
-            return
+    def _resize_wild_encounter_grid(self, nw: int, nh: int) -> None:
+        """BUG-MAP-097: keep wildEncounter sized to map_w×map_h when the map resizes."""
+        old = self.wild_encounter
+        new: list[list[int]] = [[0] * nw for _ in range(nh)]
+        if old:
+            for y in range(min(nh, len(old))):
+                row = old[y]
+                for x in range(min(nw, len(row))):
+                    new[y][x] = row[x]
+        self.wild_encounter = new
+
+    def _ensure_wild_encounter_grid(self) -> None:
+        """BUG-MAP-096: allocate or resize wildEncounter to match the active map dimensions."""
+        if (
+            len(self.wild_encounter) != self.map_h
+            or not self.wild_encounter
+            or len(self.wild_encounter[0]) != self.map_w
+        ):
+            self._resize_wild_encounter_grid(self.map_w, self.map_h)
+
+    def _sync_wild_data_for_map(self, map_id: str) -> None:
+        """Load wild patches/grid for map_id from disk (BUG-MAP-096/097)."""
+        self._load_wild_data_for_scope(map_id)
+
+    def _apply_wild_fields_to_map_data(self, data: dict) -> None:
+        """Merge in-memory wild encounter fields into a map JSON dict."""
         if self.wild_patches:
             data["wildPatches"] = copy.deepcopy(self.wild_patches)
         else:
@@ -1220,6 +1251,20 @@ class MapEditor:
             layers["wildEncounter"] = [list(row) for row in self.wild_encounter]
         else:
             layers.pop("wildEncounter", None)
+
+    def _mark_wild_dirty(self) -> None:
+        self._wild_modal_dirty = True
+
+    def _persist_wild_data_for_scope(self, map_id: str) -> None:
+        if not self._wild_modal_dirty:
+            return
+        path = MAPS_DIR / f"{sanitize_map_id(map_id)}.json"
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return
+        self._apply_wild_fields_to_map_data(data)
         try:
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
@@ -1240,7 +1285,7 @@ class MapEditor:
             self._persist_wild_data_for_scope(self.wild_modal_scope_id)
         self.try_load_map_by_id(map_id)
         self.wild_modal_scope_id = map_id
-        self._load_wild_data_for_scope(map_id)
+        self._ensure_wild_encounter_grid()
         self.wild_modal_map_off_x = 0
         self.wild_modal_map_off_y = 0
 
@@ -1266,7 +1311,7 @@ class MapEditor:
     def _ensure_default_wild_patch(self) -> None:
         if not self.wild_patches:
             self.wild_patches.append(self._wild_default_patch(1))
-            self._wild_modal_dirty = True
+            self._mark_wild_dirty()
         self.active_wild_patch_index = max(0, min(self.active_wild_patch_index, len(self.wild_patches) - 1))
 
     def _wild_default_patch(self, n: int) -> dict:
@@ -1314,6 +1359,7 @@ class MapEditor:
             self.wild_patches.append(self._wild_default_patch(n))
             self.active_wild_patch_index = len(self.wild_patches) - 1
             self.selected_wild_patch_index = self.active_wild_patch_index
+            self._mark_wild_dirty()
             self.set_status(f"Added patch_{n}.", kind="ok")
             return True
 
@@ -1332,6 +1378,7 @@ class MapEditor:
                         row[cx] = v - 1
             self.active_wild_patch_index = max(0, min(idx, len(self.wild_patches) - 1))
             self.selected_wild_patch_index = self.active_wild_patch_index
+            self._mark_wild_dirty()
             self.set_status(f"Deleted patch_{removed_id}.", kind="ok")
             return True
 
@@ -1359,6 +1406,7 @@ class MapEditor:
             self.wild_patches.pop(idx)
             self.active_wild_patch_index = target_idx
             self.selected_wild_patch_index = target_idx
+            self._mark_wild_dirty()
             self.set_status(f"Merged patch_{removed_id} into patch_{target_id}.", kind="ok")
             return True
 
@@ -1407,6 +1455,7 @@ class MapEditor:
                         self.selected_wild_patch_index = self.active_wild_patch_index
                         val = len(self.wild_patches)
                     self.wild_encounter[sy][sx] = val
+        self._mark_wild_dirty()
 
     def _open_wild_canvas_mode(self) -> None:
         """FEATURE-MAP-098: enter wild patch paint on the main editor canvas."""
@@ -1415,6 +1464,7 @@ class MapEditor:
             return
         self.wild_canvas_mode_open = True
         self.wild_encounter_mode_open = True
+        self._sync_wild_data_for_map(self.map_id)
         self._ensure_default_wild_patch()
         self.set_status(
             "Wild patch paint on main map — Esc to exit; RMB erases; open Wild modal for species.",
@@ -1423,6 +1473,8 @@ class MapEditor:
 
     def _close_wild_canvas_mode(self) -> None:
         """FEATURE-MAP-098: leave main-map wild canvas mode."""
+        if self._wild_modal_dirty:
+            self._persist_wild_data_for_scope(sanitize_map_id(self.map_id))
         self.wild_canvas_mode_open = False
         self.wild_encounter_mode_open = False
         self.wild_canvas_drag_start = None
@@ -1526,6 +1578,7 @@ class MapEditor:
     def _invalidate_valid_stands_cache(self) -> None:
         self._valid_stands_cache_dirty = True
         self._valid_stands_cache_anchors = None
+        self._valid_stands_covered_grid = None
 
     def _refresh_overworld_view_player_config(self, force: bool = False) -> None:
         """IMPROVEMENT-MAP-036: load playerTiles* and playerCollision* like Game::loadOverworldViewConfig_."""
@@ -1594,6 +1647,46 @@ class MapEditor:
         self._ov_collision_w = cw
         self._ov_collision_h = ch
         self._ov_refresh_ran_this_frame = True
+
+    def _ensure_wild_overlay_surfaces(self) -> None:
+        """Reuse SRCALPHA surfaces for wild patch cell tint (avoid per-cell allocations)."""
+        cp = self.cell_px
+        if (
+            self._wild_overlay_cell_px != cp
+            or self._wild_overlay_active is None
+            or self._wild_overlay_inactive is None
+        ):
+            self._wild_overlay_cell_px = cp
+            self._wild_overlay_active = pygame.Surface((cp, cp), pygame.SRCALPHA)
+            self._wild_overlay_inactive = pygame.Surface((cp, cp), pygame.SRCALPHA)
+            self._wild_overlay_active.fill((90, 240, 160, 120))
+            self._wild_overlay_inactive.fill((60, 210, 120, 90))
+
+    def blit_wild_encounter_cell_overlay(
+        self,
+        surf: pygame.Surface,
+        px: int,
+        py: int,
+        cp: int,
+        *,
+        active: bool,
+        selected: bool = False,
+    ) -> None:
+        """Draw wild patch tint on surf; selected uses a distinct blue highlight."""
+        if selected:
+            ov = pygame.Surface((cp, cp), pygame.SRCALPHA)
+            ov.fill((60, 180, 255, 150))
+            surf.blit(ov, (px, py))
+            return
+        if cp != self.cell_px:
+            ov = pygame.Surface((cp, cp), pygame.SRCALPHA)
+            ov.fill((90, 240, 160, 120) if active else (60, 210, 120, 90))
+            surf.blit(ov, (px, py))
+            return
+        self._ensure_wild_overlay_surfaces()
+        ov = self._wild_overlay_active if active else self._wild_overlay_inactive
+        if ov is not None:
+            surf.blit(ov, (px, py))
 
     def _ensure_walk_trans_overlay_surfaces(self) -> None:
         """Reuse SRCALPHA surfaces for walk/transparent/over-player cell tint (avoid per-cell allocations)."""
@@ -1691,17 +1784,25 @@ class MapEditor:
         mw, mh = self.map_w, self.map_h
         if mw <= 0 or mh <= 0:
             return
-        covered = [bytearray(mw) for _ in range(mh)]
-        for ax, ay in anchors:
-            for dy in range(ph):
-                yy = ay + dy
-                if yy < 0 or yy >= mh:
-                    continue
-                row = covered[yy]
-                for dx in range(pw):
-                    xx = ax + draw_off_x + dx
-                    if 0 <= xx < mw:
-                        row[xx] = 1
+        if (
+            not self._valid_stands_cache_dirty
+            and self._valid_stands_covered_grid is not None
+            and len(self._valid_stands_covered_grid) == mh
+        ):
+            covered = self._valid_stands_covered_grid
+        else:
+            covered = [bytearray(mw) for _ in range(mh)]
+            for ax, ay in anchors:
+                for dy in range(ph):
+                    yy = ay + dy
+                    if yy < 0 or yy >= mh:
+                        continue
+                    row = covered[yy]
+                    for dx in range(pw):
+                        xx = ax + draw_off_x + dx
+                        if 0 <= xx < mw:
+                            row[xx] = 1
+            self._valid_stands_covered_grid = covered
         canvas = self.map_canvas_rect
         ox = self.map_origin_x - self.map_view_off_x
         oy = self.map_origin_y - self.map_view_off_y
@@ -1762,6 +1863,7 @@ class MapEditor:
 
     def ensure_sheet(self, ts_id: str) -> tuple[pygame.Surface, dict] | None:
         if ts_id in self.sheet_cache and ts_id in self.meta_cache:
+            self.sheet_cache.move_to_end(ts_id)
             return self.sheet_cache[ts_id], self.meta_cache[ts_id]
         meta = self.get_tileset_meta(ts_id)
         if not meta:
@@ -1790,6 +1892,10 @@ class MapEditor:
         }
         self.sheet_cache[ts_id] = surf
         self.meta_cache[ts_id] = m
+        self.sheet_cache.move_to_end(ts_id)
+        while len(self.sheet_cache) > SHEET_CACHE_MAX:
+            evict_id, _ = self.sheet_cache.popitem(last=False)
+            self.meta_cache.pop(evict_id, None)
         return surf, m
 
     def reload_tileset_sheet(self) -> None:
@@ -1806,6 +1912,8 @@ class MapEditor:
         self.palette_scroll_y = 0
         self.palette_scroll_x = 0
         self.palette_zoom_offset = 0
+        self._palette_thumb_cache_key = None
+        self._palette_thumb_surface = None
         self._refresh_brush_palette_outline()
 
     def _refresh_brush_palette_outline(self) -> None:
@@ -2645,6 +2753,7 @@ class MapEditor:
                 self.walk[y][x] = old_w[y][x]
                 self.trans[y][x] = old_t[y][x]
                 self.over_player[y][x] = old_o[y][x]
+        self._resize_wild_encounter_grid(nw, nh)
         self._invalidate_valid_stands_cache()
         self._clear_undo_stacks()
 
@@ -2687,6 +2796,12 @@ class MapEditor:
             "saved_once": self.saved_once,
             "disk_backing": self._map_disk_backing_id,
             "map_events": copy.deepcopy(self.map_events),
+            "wild_patches": copy.deepcopy(self.wild_patches),
+            "wild_global_encounters": copy.deepcopy(self.wild_global_encounters),
+            "wild_encounter": [row[:] for row in self.wild_encounter],
+            "active_wild_patch_index": self.active_wild_patch_index,
+            "selected_wild_patch_index": self.selected_wild_patch_index,
+            "wild_modal_dirty": self._wild_modal_dirty,
         }
 
     def _restore_session_map_bundle(self, s: dict) -> None:
@@ -2717,6 +2832,29 @@ class MapEditor:
             self.map_events = [copy.deepcopy(x) for x in raw_me if isinstance(x, dict)]
         else:
             self.map_events = []
+        raw_wp = s.get("wild_patches")
+        if isinstance(raw_wp, list):
+            self.wild_patches = [copy.deepcopy(p) for p in raw_wp if isinstance(p, dict)]
+        else:
+            self.wild_patches = []
+        raw_ge = s.get("wild_global_encounters")
+        if isinstance(raw_ge, dict):
+            self.wild_global_encounters = copy.deepcopy(raw_ge)
+        else:
+            self.wild_global_encounters = {"common": [], "uncommon": [], "rare": []}
+        raw_we = s.get("wild_encounter")
+        if (
+            isinstance(raw_we, list)
+            and len(raw_we) == self.map_h
+            and raw_we
+            and len(raw_we[0]) == self.map_w
+        ):
+            self.wild_encounter = [row[:] for row in raw_we]
+        else:
+            self._resize_wild_encounter_grid(self.map_w, self.map_h)
+        self.active_wild_patch_index = int(s.get("active_wild_patch_index", 0))
+        self.selected_wild_patch_index = int(s.get("selected_wild_patch_index", 0))
+        self._wild_modal_dirty = bool(s.get("wild_modal_dirty", False))
         self.reload_tileset_sheet()
         self._clear_undo_stacks()
         self._refresh_brush_palette_outline()
@@ -2727,6 +2865,9 @@ class MapEditor:
         if cur == target_cache_key:
             return
         self._session_map_cache[cur] = self._snapshot_session_map_bundle()
+        self._session_map_cache.move_to_end(cur)
+        while len(self._session_map_cache) > SESSION_MAP_CACHE_MAX:
+            self._session_map_cache.popitem(last=False)
 
     def _list_png_names_cached(self, root: Path, cache_key: str) -> list[str]:
         now = time.time()
@@ -2917,6 +3058,7 @@ class MapEditor:
         self._clear_undo_stacks()
         self._map_disk_backing_id = path.stem
         self.saved_once = True
+        self._sync_wild_data_for_map(target_key)
         self._invalidate_valid_stands_cache()
 
     def _write_map_json_to_disk(self, map_id: str) -> None:
@@ -2960,12 +3102,14 @@ class MapEditor:
         }
         if self.map_events:
             data["events"] = copy.deepcopy(self.map_events)
+        self._apply_wild_fields_to_map_data(data)
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
             f.write("\n")
         print(f"Saved {path}")
         self.saved_once = True
         self._map_disk_backing_id = map_id
+        self._wild_modal_dirty = False
         write_maps_index()
         self._session_map_cache.pop(sanitize_map_id(map_id), None)
 
@@ -3121,7 +3265,18 @@ class MapEditor:
         assert isinstance(ed, dict)
         return ed
 
+    def _tileset_list_cache_token(self) -> tuple:
+        ed = self.registry.get("editorTilesetFolders")
+        if not isinstance(ed, dict):
+            return (len(self.tileset_defs),)
+        order = ed.get("order") or []
+        collapsed = ed.get("collapsed") or []
+        return (len(self.tileset_defs), len(order), tuple(str(x) for x in collapsed))
+
     def _build_tileset_list_rows(self) -> list[dict]:
+        token = self._tileset_list_cache_token()
+        if self._tileset_list_rows_cache is not None and self._tileset_list_rows_cache_token == token:
+            return self._tileset_list_rows_cache
         ed = self._editor_folder_blob()
         order = list(ed.get("order") or [])
         collapsed: set[str] = set(str(x) for x in (ed.get("collapsed") or []))
@@ -3201,6 +3356,8 @@ class MapEditor:
                         "in_folder": None,
                     }
                 )
+        self._tileset_list_rows_cache_token = token
+        self._tileset_list_rows_cache = rows
         return rows
 
     def _folder_order_replace_tileset_id(self, old_id: str, new_id: str) -> None:
@@ -3924,6 +4081,12 @@ class MapEditor:
     ) -> None:
         if tile_1based <= 0:
             return
+        cache_key = (ts_id, tile_1based, dst_wh)
+        cached = self._scaled_tile_cache.get(cache_key)
+        if cached is not None:
+            self._scaled_tile_cache.move_to_end(cache_key)
+            surf.blit(cached, (dst_x, dst_y))
+            return
         out = self.ensure_sheet(ts_id)
         if not out:
             return
@@ -3939,6 +4102,10 @@ class MapEditor:
         rect = pygame.Rect(sx, sy, tw, th)
         tile = sheet.subsurface(rect)
         scaled = pygame.transform.scale(tile, (dst_wh, dst_wh))
+        self._scaled_tile_cache[cache_key] = scaled
+        self._scaled_tile_cache.move_to_end(cache_key)
+        while len(self._scaled_tile_cache) > SCALED_TILE_CACHE_MAX:
+            self._scaled_tile_cache.popitem(last=False)
         surf.blit(scaled, (dst_x, dst_y))
 
     def draw(self) -> None:
@@ -4117,7 +4284,11 @@ class MapEditor:
             ox, oy, scale, visible_h = self._palette_thumb_metrics()
             self.palette_scale = scale
             sw, sh = self.sheet.get_size()
-            thumb = pygame.transform.scale(self.sheet, (sw * scale, sh * scale))
+            thumb_key = (id(self.sheet), sw, sh, scale)
+            if thumb_key != self._palette_thumb_cache_key or self._palette_thumb_surface is None:
+                self._palette_thumb_surface = pygame.transform.scale(self.sheet, (sw * scale, sh * scale))
+                self._palette_thumb_cache_key = thumb_key
+            thumb = self._palette_thumb_surface
             max_w = self.palette_rect.w - 8
             clip_rect = pygame.Rect(ox, oy, max_w, visible_h)
             prev_clip = self.screen.get_clip()
@@ -4201,9 +4372,11 @@ class MapEditor:
 
         if self.world_workspace_open:
             self._draw_world_workspace()
-        if not self.world_workspace_open:
+        if not self.world_workspace_open and not self._any_blocking_modal_open():
             if self.edit_mode in ("walk", "transparent", "over_player"):
                 self._ensure_walk_trans_overlay_surfaces()
+            if self.wild_canvas_mode_open:
+                self._ensure_wild_overlay_surfaces()
             for y in range(self.map_h):
                 for x in range(self.map_w):
                     px = self.map_origin_x + x * self.cell_px - self.map_view_off_x
@@ -4241,10 +4414,10 @@ class MapEditor:
                     if self.wild_canvas_mode_open:
                         idx = self.wild_encounter[y][x]
                         if idx > 0:
-                            ov = pygame.Surface((self.cell_px, self.cell_px), pygame.SRCALPHA)
                             act = idx - 1 == self.active_wild_patch_index
-                            ov.fill((90, 240, 160, 120) if act else (60, 210, 120, 90))
-                            self.screen.blit(ov, (px, py))
+                            self.blit_wild_encounter_cell_overlay(
+                                self.screen, px, py, self.cell_px, active=act
+                            )
                             if self.cell_px >= 10:
                                 digit = self.font_small.render(str(idx), True, (255, 255, 255))
                                 self.screen.blit(
@@ -6103,7 +6276,10 @@ class MapEditor:
                         n = self.world_nodes[self.world_drag_node_i]
                         n["worldX"] = float(wwx - self._world_drag_off_x)
                         n["worldY"] = float(wwy - self._world_drag_off_y)
-                        self._world_fixup_overlaps(self.world_drag_node_i)
+                        now_ms = pygame.time.get_ticks()
+                        if now_ms - self._world_fixup_last_ms >= WORLD_FIXUP_THROTTLE_MS:
+                            self._world_fixup_overlaps(self.world_drag_node_i)
+                            self._world_fixup_last_ms = now_ms
                     if self.world_workspace_open and self._world_panning and mouse_down and self._world_pan_last:
                         px, py = self._world_pan_last
                         z = max(WORLD_CAM_ZOOM_MIN, min(WORLD_CAM_ZOOM_MAX, self.world_cam_zoom))
