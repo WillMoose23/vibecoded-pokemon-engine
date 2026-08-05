@@ -114,6 +114,7 @@ from events_launcher_modal import EventsLauncherModal
 from flag_registry_modal import EventFlagRegistryModal
 from wild_encounter_editor_helpers import snap_cell_to_stride_grid
 from wild_encounter_modal import WildEncounterModal
+from npc_sprite_editor_modal import NpcSpriteEditorModal
 
 _WILD_CANVAS_PANEL_W = 260
 
@@ -182,6 +183,8 @@ PALETTE_SCALE_MAX = 12  # FEATURE-MAP-015
 MAP_ZOOM_MIN = 8   # FEATURE-MAP-025
 MAP_ZOOM_MAX = 64  # FEATURE-MAP-025
 TILESET_LIST_W = 292
+TILESET_LIST_COLLAPSED_W = 28
+SECTION_UNFILED_ID = "section:unfiled"
 LIST_CLICK_DOUBLE = 0.45
 
 # FEATURE-MAP-041 / IMPROVEMENT-MAP-094: modal help guide — (tab_id, tab label)
@@ -207,7 +210,7 @@ HELP_HOME_JUMP_TABS: tuple[str, ...] = (
 )
 TILESET_LIST_DRAG_THRESHOLD_PX = 4
 TILESET_LIST_ROW_LINES = 2
-TILESET_LIST_CHILD_INDENT_PX = 14  # IMPROVEMENT-MAP-015
+TILESET_LIST_CHILD_INDENT_PX = 20  # FEATURE-MAP-099 / IMPROVEMENT-MAP-015
 UNDO_STACK_MAX = 80
 MAP_EDITOR_TOOL_VERSION = "3.0"
 WORLD_LAYOUT_JSON_PATH = MAPS_DIR / WORLD_LAYOUT_JSON_NAME
@@ -818,7 +821,10 @@ class MapEditor:
         self.eraser_mode = False  # FEATURE-MAP-016
         self.fill_mode = False  # FEATURE-MAP-017
         self.tileset_list_scroll_y = 0
-        self.tileset_list_scroll_x = 0  # FEATURE-MAP-024
+        self.tileset_list_scroll_x = 0
+        _tl_cfg = self.config_get_section("tilesetList")
+        self.tileset_list_collapsed = bool(_tl_cfg.get("collapsed", False))
+        self._tileset_list_collapse_btn_rect = pygame.Rect(0, 0, 1, 1)  # FEATURE-MAP-024
         self._tileset_list_header_h = 52
         self.tileset_rename_index: int | None = None
         self.tileset_rename_buffer = ""
@@ -966,6 +972,7 @@ class MapEditor:
         self.event_place_modal = EventPlaceModal(self)
         self.event_sprite_modal = EventSpriteModal(self)
         self.event_doc_popout_modal = EventDocPopoutModal(self)
+        self.npc_sprite_editor_modal = NpcSpriteEditorModal(self)
         self._help_back_to: str | None = None
 
         # BUG-MAP-089: restore starred species for the wild-encounter picker.
@@ -1015,6 +1022,7 @@ class MapEditor:
             or self.event_place_modal.open
             or self.event_sprite_modal.open
             or self.event_doc_popout_modal.open
+            or self.npc_sprite_editor_modal.open
         )
 
     # ------------------------------------------------------------------
@@ -1951,7 +1959,8 @@ class MapEditor:
         palette_w = int(max(220, min(w * 0.22, 400)))
         self.palette_rect = pygame.Rect(m, m, palette_w, available_h)
         list_x = self.palette_rect.right + PALETTE_MAP_GAP
-        self.tileset_list_rect = pygame.Rect(list_x, m, TILESET_LIST_W, available_h)
+        list_w = TILESET_LIST_COLLAPSED_W if self.tileset_list_collapsed else TILESET_LIST_W
+        self.tileset_list_rect = pygame.Rect(list_x, m, list_w, available_h)
         map_x = self.tileset_list_rect.right + PALETTE_MAP_GAP
         map_w = max(80, w - map_x - m)
         self.map_viewport_rect = pygame.Rect(map_x, m, map_w, available_h)
@@ -3344,18 +3353,28 @@ class MapEditor:
             if str(d.get("id", "")) not in in_order_ts
         ]
         if unfiled:
-            rows.append({"row_kind": "section", "name": "Unfiled", "indent_px": 0})
-            for idx in unfiled:
-                tid = str(self.tileset_defs[idx].get("id", ""))
-                rows.append(
-                    {
-                        "row_kind": "tileset",
-                        "def_index": idx,
-                        "id": tid,
-                        "indent_px": 0,
-                        "in_folder": None,
-                    }
-                )
+            unfiled_collapsed = SECTION_UNFILED_ID in collapsed
+            rows.append(
+                {
+                    "row_kind": "section",
+                    "name": "Unfiled",
+                    "indent_px": 0,
+                    "section_id": SECTION_UNFILED_ID,
+                    "collapsed": unfiled_collapsed,
+                }
+            )
+            if not unfiled_collapsed:
+                for idx in unfiled:
+                    tid = str(self.tileset_defs[idx].get("id", ""))
+                    rows.append(
+                        {
+                            "row_kind": "tileset",
+                            "def_index": idx,
+                            "id": tid,
+                            "indent_px": TILESET_LIST_CHILD_INDENT_PX,
+                            "in_folder": None,
+                        }
+                    )
         self._tileset_list_rows_cache_token = token
         self._tileset_list_rows_cache = rows
         return rows
@@ -3476,6 +3495,14 @@ class MapEditor:
         ed["collapsed"] = sorted(s)
         write_tilesets_registry(TILESETS_JSON, self.registry)
 
+    def _set_tileset_list_collapsed(self, collapsed: bool) -> None:
+        """FEATURE-MAP-099: persist left tileset panel collapsed strip."""
+        self.tileset_list_collapsed = collapsed
+        sec = self.config_get_section("tilesetList")
+        sec["collapsed"] = collapsed
+        self.config_set_section("tilesetList", sec)
+        self.relayout()
+
     def _prompt_folder_color(self, folder_id: str) -> None:
         ed = self._editor_folder_blob()
         fm = None
@@ -3524,7 +3551,9 @@ class MapEditor:
         row = rows[ridx]
         rk = row["row_kind"]
         if rk == "section":
-            return ("section", None)
+            sid = str(row.get("section_id") or "")
+            chevron = px < self.tileset_list_rect.x + 24
+            return ("section", (sid, chevron))
         if rk == "folder":
             chevron = px < self.tileset_list_rect.x + 24
             return ("folder", (row["folder_id"], chevron))
@@ -3549,6 +3578,8 @@ class MapEditor:
 
     def _measure_tileset_list_header_height(self) -> int:
         """Must match tileset header block in draw() (including wrapped title width)."""
+        if self.tileset_list_collapsed:
+            return 24
         pad = 6
         list_r = self.tileset_list_rect
         hx = list_r.x + 6
@@ -4116,169 +4147,191 @@ class MapEditor:
         ptitle = self.font.render("Preview", True, (220, 220, 220))
         self.screen.blit(ptitle, (self.palette_rect.x + 4, self.palette_rect.y + 4))
         pygame.draw.rect(self.screen, (48, 48, 56), self.tileset_list_rect, 1)
-        hx = self.tileset_list_rect.x + 6
-        hw = max(80, self.tileset_list_rect.w - 12)
-        hy = self.tileset_list_rect.y + 6
-        self.new_folder_btn_rect = pygame.Rect(self.tileset_list_rect.right - 86, hy, 78, 22)
-        pygame.draw.rect(self.screen, (56, 92, 72), self.new_folder_btn_rect)
-        pygame.draw.rect(self.screen, (100, 140, 110), self.new_folder_btn_rect, 1)
-        self.screen.blit(
-            self.font_small.render("+ Folder", True, (235, 245, 235)),
-            (self.new_folder_btn_rect.x + 10, self.new_folder_btn_rect.y + 5),
-        )
-        title_w = max(40, min(hw, self.new_folder_btn_rect.x - hx - 8))
-        hint_w = max(40, self.tileset_list_rect.w - 28)
-        hint_h = 220
-        hy = blit_wrapped_text(
-            self.screen,
-            self.font,
-            "Tilesets",
-            pygame.Rect(hx, hy, title_w, hint_h),
-            (220, 220, 220),
-        )
-        hy += _TILESET_LIST_HINT_GAP_AFTER_TITLE
-        hy = blit_wrapped_text(
-            self.screen,
-            self.font_small,
-            _TILESET_LIST_HINT_1,
-            pygame.Rect(hx, hy, hint_w, hint_h),
-            (145, 145, 160),
-        )
-        hy += 4  # IMPROVEMENT-MAP-016: extra gap before hint 2
-        hy = blit_wrapped_text(
-            self.screen,
-            self.font_small,
-            _TILESET_LIST_HINT_2,
-            pygame.Rect(hx, hy, hint_w, hint_h),
-            (135, 135, 150),
-        )
-        hy += 2
-        blit_wrapped_text(
-            self.screen,
-            self.font_small,
-            _TILESET_LIST_HINT_3,
-            pygame.Rect(hx, hy, hint_w, hint_h),
-            (125, 125, 140),
-        )
-        rh = self._tileset_list_row_h()
-        list_inner = pygame.Rect(
-            self.tileset_list_rect.x + 4,
-            self.tileset_list_rect.y + 4 + self._tileset_list_header_h,
-            self.tileset_list_rect.w - 22,
-            self.tileset_list_rect.h - 8 - self._tileset_list_header_h,
-        )
-        prev_clip = self.screen.get_clip()
-        self.screen.set_clip(list_inner)
-        y0 = list_inner.y
-        lh = self.font_small.get_linesize()
-        rows = self._build_tileset_list_rows()
-        drop_ridx: int | None = None
-        if (self._tileset_drag_moved and self._tileset_drag_def_index is not None) or (
-            self._folder_drag_moved and self._folder_drag_id is not None
-        ):
-            mx, my = pygame.mouse.get_pos()
-            drop_ridx = self._tileset_list_row_index_at_pixel(mx, my)
-        ts_ypad1 = self._tileset_list_y_pad_single_line()
-        hsx = self.tileset_list_scroll_x  # FEATURE-MAP-024: horizontal scroll offset
-        for ridx, row in enumerate(rows):
-            ry = y0 + ridx * rh - self.tileset_list_scroll_y
-            if ry + rh < list_inner.y - 2 or ry > list_inner.bottom + 2:
-                continue
-            row_r = pygame.Rect(list_inner.x, ry, list_inner.w, rh - 2)
-            rk = row["row_kind"]
-            if rk == "section":
-                pygame.draw.rect(self.screen, (48, 46, 56), row_r)
-                sec_b = 2 if drop_ridx == ridx else 1
-                sec_c = (255, 210, 80) if drop_ridx == ridx else (68, 66, 78)
-                pygame.draw.rect(self.screen, sec_c, row_r, sec_b)
-                self.screen.blit(
-                    self.font_small.render(str(row.get("name", "")), True, (160, 165, 185)),
-                    (list_inner.x + 8 - hsx, ry + ts_ypad1),
-                )
-            elif rk == "folder":
-                fc = row["color"]
-                folder_drag_here = (
-                    self._folder_drag_moved
-                    and self._folder_drag_id is not None
-                    and str(row.get("folder_id")) == self._folder_drag_id
-                )
-                base = (fc[0] // 3 + 20, fc[1] // 3 + 20, fc[2] // 3 + 24)
-                if folder_drag_here:
-                    base = (min(255, base[0] + 25), min(255, base[1] + 25), min(255, base[2] + 28))
-                pygame.draw.rect(self.screen, base, row_r)
-                fb = 2 if drop_ridx == ridx or folder_drag_here else 1
-                fcol = (255, 210, 80) if drop_ridx == ridx else (
-                    min(255, fc[0] + 40),
-                    min(255, fc[1] + 40),
-                    min(255, fc[2] + 50),
-                )
-                pygame.draw.rect(self.screen, fcol, row_r, fb)
-                chev = ">" if row["collapsed"] else "v"
-                self.screen.blit(
-                    self.font_small.render(chev, True, (220, 225, 235)),
-                    (list_inner.x + 8 - hsx, ry + ts_ypad1),
-                )
-                fname = str(row.get("name", ""))
-                col = (245, 250, 255)
-                if self.folder_rename_id == row["folder_id"]:
-                    buf = self.folder_rename_buffer or ""
+        if self.tileset_list_collapsed:
+            self.new_folder_btn_rect = pygame.Rect(0, 0, 0, 0)
+            self._tileset_list_collapse_btn_rect = self.tileset_list_rect.copy()
+            strip_cx = self.tileset_list_rect.centerx
+            strip_cy = self.tileset_list_rect.centery
+            self.screen.blit(
+                self.font_small.render(">", True, (200, 205, 220)),
+                (strip_cx - 4, strip_cy - 8),
+            )
+        else:
+            hx = self.tileset_list_rect.x + 6
+            hw = max(80, self.tileset_list_rect.w - 12)
+            hy = self.tileset_list_rect.y + 6
+            self._tileset_list_collapse_btn_rect = pygame.Rect(hx, hy, 20, 22)
+            pygame.draw.rect(self.screen, (44, 48, 56), self._tileset_list_collapse_btn_rect)
+            self.screen.blit(
+                self.font_small.render("<", True, (210, 215, 225)),
+                (hx + 6, hy + 4),
+            )
+            hx += 24
+            self.new_folder_btn_rect = pygame.Rect(self.tileset_list_rect.right - 86, hy, 78, 22)
+            pygame.draw.rect(self.screen, (56, 92, 72), self.new_folder_btn_rect)
+            pygame.draw.rect(self.screen, (100, 140, 110), self.new_folder_btn_rect, 1)
+            self.screen.blit(
+                self.font_small.render("+ Folder", True, (235, 245, 235)),
+                (self.new_folder_btn_rect.x + 10, self.new_folder_btn_rect.y + 5),
+            )
+            title_w = max(40, min(hw, self.new_folder_btn_rect.x - hx - 8))
+            hint_w = max(40, self.tileset_list_rect.w - 28)
+            hint_h = 220
+            hy = blit_wrapped_text(
+                self.screen,
+                self.font,
+                "Tilesets",
+                pygame.Rect(hx, hy, title_w, hint_h),
+                (220, 220, 220),
+            )
+            hy += _TILESET_LIST_HINT_GAP_AFTER_TITLE
+            hy = blit_wrapped_text(
+                self.screen,
+                self.font_small,
+                _TILESET_LIST_HINT_1,
+                pygame.Rect(hx, hy, hint_w, hint_h),
+                (145, 145, 160),
+            )
+            hy += 4  # IMPROVEMENT-MAP-016: extra gap before hint 2
+            hy = blit_wrapped_text(
+                self.screen,
+                self.font_small,
+                _TILESET_LIST_HINT_2,
+                pygame.Rect(hx, hy, hint_w, hint_h),
+                (135, 135, 150),
+            )
+            hy += 2
+            blit_wrapped_text(
+                self.screen,
+                self.font_small,
+                _TILESET_LIST_HINT_3,
+                pygame.Rect(hx, hy, hint_w, hint_h),
+                (125, 125, 140),
+            )
+            rh = self._tileset_list_row_h()
+            list_inner = pygame.Rect(
+                self.tileset_list_rect.x + 4,
+                self.tileset_list_rect.y + 4 + self._tileset_list_header_h,
+                self.tileset_list_rect.w - 22,
+                self.tileset_list_rect.h - 8 - self._tileset_list_header_h,
+            )
+            prev_clip = self.screen.get_clip()
+            self.screen.set_clip(list_inner)
+            y0 = list_inner.y
+            lh = self.font_small.get_linesize()
+            rows = self._build_tileset_list_rows()
+            drop_ridx: int | None = None
+            if (self._tileset_drag_moved and self._tileset_drag_def_index is not None) or (
+                self._folder_drag_moved and self._folder_drag_id is not None
+            ):
+                mx, my = pygame.mouse.get_pos()
+                drop_ridx = self._tileset_list_row_index_at_pixel(mx, my)
+            ts_ypad1 = self._tileset_list_y_pad_single_line()
+            hsx = self.tileset_list_scroll_x  # FEATURE-MAP-024: horizontal scroll offset
+            for ridx, row in enumerate(rows):
+                ry = y0 + ridx * rh - self.tileset_list_scroll_y
+                if ry + rh < list_inner.y - 2 or ry > list_inner.bottom + 2:
+                    continue
+                row_r = pygame.Rect(list_inner.x, ry, list_inner.w, rh - 2)
+                rk = row["row_kind"]
+                if rk == "section":
+                    pygame.draw.rect(self.screen, (48, 46, 56), row_r)
+                    sec_b = 2 if drop_ridx == ridx else 1
+                    sec_c = (255, 210, 80) if drop_ridx == ridx else (68, 66, 78)
+                    pygame.draw.rect(self.screen, sec_c, row_r, sec_b)
+                    sec_chev = ">" if row.get("collapsed") else "v"
                     self.screen.blit(
-                        self.font_small.render(f"[{buf}]", True, col),
+                        self.font_small.render(sec_chev, True, (220, 225, 235)),
+                        (list_inner.x + 8 - hsx, ry + ts_ypad1),
+                    )
+                    self.screen.blit(
+                        self.font_small.render(str(row.get("name", "")), True, (160, 165, 185)),
                         (list_inner.x + 28 - hsx, ry + ts_ypad1),
                     )
-                else:
-                    self.screen.blit(
-                        self.font_small.render(fname, True, col),
-                        (list_inner.x + 28 - hsx, ry + ts_ypad1),
+                elif rk == "folder":
+                    fc = row["color"]
+                    folder_drag_here = (
+                        self._folder_drag_moved
+                        and self._folder_drag_id is not None
+                        and str(row.get("folder_id")) == self._folder_drag_id
                     )
-            else:
-                i = int(row["def_index"])
-                tid = str(row.get("id", "?"))
-                ipx = int(row.get("indent_px", 0))
-                tx = list_inner.x + 8 + ipx - hsx
-                sel = i == self.tileset_index
-                drag_here = self._tileset_drag_moved and self._tileset_drag_def_index == i
-                bg = (68, 72, 90) if drag_here else ((58, 62, 78) if sel else (40, 42, 50))
-                pygame.draw.rect(self.screen, bg, row_r)
-                br_col = (255, 210, 80) if drop_ridx == ridx else ((70, 74, 88) if sel else (52, 54, 62))
-                pygame.draw.rect(self.screen, br_col, row_r, 2 if drop_ridx == ridx else 1)
-                col = (255, 225, 120) if sel else (185, 188, 205)
-                if self.tileset_rename_index == i:
-                    buf = self.tileset_rename_buffer or ""
-                    line = f"[{buf}]"
-                    self.screen.blit(self.font_small.render(line, True, col), (tx, ry + ts_ypad1))
-                else:
-                    lines = self._tileset_id_lines(tid, ipx)
-                    ts_ypn = self._tileset_list_y_pad_multiline(len(lines))
-                    for li, part in enumerate(lines):
+                    base = (fc[0] // 3 + 20, fc[1] // 3 + 20, fc[2] // 3 + 24)
+                    if folder_drag_here:
+                        base = (min(255, base[0] + 25), min(255, base[1] + 25), min(255, base[2] + 28))
+                    pygame.draw.rect(self.screen, base, row_r)
+                    fb = 2 if drop_ridx == ridx or folder_drag_here else 1
+                    fcol = (255, 210, 80) if drop_ridx == ridx else (
+                        min(255, fc[0] + 40),
+                        min(255, fc[1] + 40),
+                        min(255, fc[2] + 50),
+                    )
+                    pygame.draw.rect(self.screen, fcol, row_r, fb)
+                    chev = ">" if row["collapsed"] else "v"
+                    self.screen.blit(
+                        self.font_small.render(chev, True, (220, 225, 235)),
+                        (list_inner.x + 8 - hsx, ry + ts_ypad1),
+                    )
+                    fname = str(row.get("name", ""))
+                    col = (245, 250, 255)
+                    if self.folder_rename_id == row["folder_id"]:
+                        buf = self.folder_rename_buffer or ""
                         self.screen.blit(
-                            self.font_small.render(part, True, col),
-                            (tx, ry + ts_ypn + li * lh),
+                            self.font_small.render(f"[{buf}]", True, col),
+                            (list_inner.x + 28 - hsx, ry + ts_ypad1),
                         )
-        self.screen.set_clip(prev_clip)
-        content_h = max(1, len(rows)) * rh + 8
-        visible_h = list_inner.h
-        max_scroll = max(0, content_h - visible_h)
-        if max_scroll > 0 and list_inner.h > 40:
-            thumb_h = max(28, int(visible_h * visible_h / content_h))
-            t_y = list_inner.y + int(
-                (self.tileset_list_scroll_y / max_scroll) * max(1, visible_h - thumb_h)
-            )
-            sbar = pygame.Rect(list_inner.right + 4, list_inner.y, 5, visible_h)
-            pygame.draw.rect(self.screen, (35, 35, 42), sbar)
-            pygame.draw.rect(self.screen, (95, 98, 115), (sbar.x, t_y, 5, thumb_h))
-        # FEATURE-MAP-024: horizontal scrollbar for tileset list
-        content_w = TILESET_LIST_W + TILESET_LIST_CHILD_INDENT_PX * 4
-        inner_w = list_inner.w
-        max_scroll_x = max(0, content_w - inner_w)
-        if max_scroll_x > 0 and list_inner.w > 40:
-            thumb_w = max(28, int(inner_w * inner_w / content_w))
-            t_x = list_inner.x + int(
-                (self.tileset_list_scroll_x / max_scroll_x) * max(1, inner_w - thumb_w)
-            )
-            hbar = pygame.Rect(list_inner.x, list_inner.bottom + 2, inner_w, 5)
-            pygame.draw.rect(self.screen, (35, 35, 42), hbar)
-            pygame.draw.rect(self.screen, (95, 98, 115), (t_x, hbar.y, thumb_w, 5))
+                    else:
+                        self.screen.blit(
+                            self.font_small.render(fname, True, col),
+                            (list_inner.x + 28 - hsx, ry + ts_ypad1),
+                        )
+                else:
+                    i = int(row["def_index"])
+                    tid = str(row.get("id", "?"))
+                    ipx = int(row.get("indent_px", 0))
+                    tx = list_inner.x + 8 + ipx - hsx
+                    sel = i == self.tileset_index
+                    drag_here = self._tileset_drag_moved and self._tileset_drag_def_index == i
+                    bg = (68, 72, 90) if drag_here else ((58, 62, 78) if sel else (40, 42, 50))
+                    pygame.draw.rect(self.screen, bg, row_r)
+                    br_col = (255, 210, 80) if drop_ridx == ridx else ((70, 74, 88) if sel else (52, 54, 62))
+                    pygame.draw.rect(self.screen, br_col, row_r, 2 if drop_ridx == ridx else 1)
+                    col = (255, 225, 120) if sel else (185, 188, 205)
+                    if self.tileset_rename_index == i:
+                        buf = self.tileset_rename_buffer or ""
+                        line = f"[{buf}]"
+                        self.screen.blit(self.font_small.render(line, True, col), (tx, ry + ts_ypad1))
+                    else:
+                        lines = self._tileset_id_lines(tid, ipx)
+                        ts_ypn = self._tileset_list_y_pad_multiline(len(lines))
+                        for li, part in enumerate(lines):
+                            self.screen.blit(
+                                self.font_small.render(part, True, col),
+                                (tx, ry + ts_ypn + li * lh),
+                            )
+            self.screen.set_clip(prev_clip)
+            content_h = max(1, len(rows)) * rh + 8
+            visible_h = list_inner.h
+            max_scroll = max(0, content_h - visible_h)
+            if max_scroll > 0 and list_inner.h > 40:
+                thumb_h = max(28, int(visible_h * visible_h / content_h))
+                t_y = list_inner.y + int(
+                    (self.tileset_list_scroll_y / max_scroll) * max(1, visible_h - thumb_h)
+                )
+                sbar = pygame.Rect(list_inner.right + 4, list_inner.y, 5, visible_h)
+                pygame.draw.rect(self.screen, (35, 35, 42), sbar)
+                pygame.draw.rect(self.screen, (95, 98, 115), (sbar.x, t_y, 5, thumb_h))
+            # FEATURE-MAP-024: horizontal scrollbar for tileset list
+            content_w = TILESET_LIST_W + TILESET_LIST_CHILD_INDENT_PX * 4
+            inner_w = list_inner.w
+            max_scroll_x = max(0, content_w - inner_w)
+            if max_scroll_x > 0 and list_inner.w > 40:
+                thumb_w = max(28, int(inner_w * inner_w / content_w))
+                t_x = list_inner.x + int(
+                    (self.tileset_list_scroll_x / max_scroll_x) * max(1, inner_w - thumb_w)
+                )
+                hbar = pygame.Rect(list_inner.x, list_inner.bottom + 2, inner_w, 5)
+                pygame.draw.rect(self.screen, (35, 35, 42), hbar)
+                pygame.draw.rect(self.screen, (95, 98, 115), (t_x, hbar.y, thumb_w, 5))
         if self.sheet:
             self._clamp_palette_scroll()
             ox, oy, scale, visible_h = self._palette_thumb_metrics()
@@ -4637,6 +4690,8 @@ class MapEditor:
             self.events_launcher_modal.draw()
         if self.wild_encounter_modal.open:
             self.wild_encounter_modal.draw()
+        if self.npc_sprite_editor_modal.open:
+            self.npc_sprite_editor_modal.draw()
         if self.audio_engine_modal.open:
             self.audio_engine_modal.draw()
         if self.battle_editor_modal.open:
@@ -5582,6 +5637,8 @@ class MapEditor:
             self.events_launcher_modal.close_modal()
         elif back_to == "wild" and self.wild_encounter_modal.open:
             self.wild_encounter_modal.close_modal()
+        elif back_to == "npc" and self.npc_sprite_editor_modal.open:
+            self.npc_sprite_editor_modal.close_modal()
         elif back_to == "audio" and self.audio_engine_modal.open:
             self.audio_engine_modal.close_modal()
         elif back_to == "battle" and self.battle_editor_modal.open:
@@ -5606,6 +5663,8 @@ class MapEditor:
         elif back == "wild":
             if not self.wild_canvas_mode_open:
                 self.wild_encounter_modal.open_modal()
+        elif back == "npc":
+            self.npc_sprite_editor_modal.open_modal()
         elif back == "audio":
             self.audio_engine_modal.open_modal()
         elif back == "battle":
@@ -6145,6 +6204,9 @@ class MapEditor:
                     if self.wild_encounter_modal.open:
                         self.wild_encounter_modal.handle_wheel(mx, my, int(event.y))
                         continue
+                    if self.npc_sprite_editor_modal.open:
+                        self.npc_sprite_editor_modal.handle_wheel(mx, my, int(event.y))
+                        continue
                     if self.audio_engine_modal.open:
                         self.audio_engine_modal.handle_wheel(mx, my, int(event.y))
                         continue
@@ -6255,6 +6317,8 @@ class MapEditor:
                         self.event_sprite_modal.handle_mouse_motion(mx, my)
                     if self.wild_encounter_modal.open:
                         self.wild_encounter_modal.handle_mouse_motion(mx, my)
+                    if self.npc_sprite_editor_modal.open:
+                        self.npc_sprite_editor_modal.handle_mouse_motion(mx, my)
                     if self.audio_engine_modal.open:
                         self.audio_engine_modal.handle_mouse_motion(mx, my)
                     if self.battle_editor_modal.open:
@@ -6354,6 +6418,9 @@ class MapEditor:
                             continue
                     if self.wild_encounter_modal.open:
                         if self.wild_encounter_modal.handle_mouse_down(*event.pos, event.button):
+                            continue
+                    if self.npc_sprite_editor_modal.open:
+                        if self.npc_sprite_editor_modal.handle_mouse_down(*event.pos, event.button):
                             continue
                     if self.audio_engine_modal.open:
                         if self.audio_engine_modal.handle_mouse_down(*event.pos, event.button):
@@ -6461,6 +6528,13 @@ class MapEditor:
                         self._clear_all_list_drags()
                         self.add_tileset_folder()
                         continue
+                    if self.tileset_list_rect.collidepoint(event.pos) and event.button == 1:
+                        if self.tileset_list_collapsed:
+                            self._set_tileset_list_collapsed(False)
+                            continue
+                        if self._tileset_list_collapse_btn_rect.collidepoint(event.pos):
+                            self._set_tileset_list_collapsed(True)
+                            continue
                     if self.tileset_list_rect.collidepoint(event.pos):
                         hit, payload = self._tileset_list_hit(*event.pos)
                         if event.button == 3 and hit == "folder" and payload:
@@ -6468,6 +6542,12 @@ class MapEditor:
                             self._prompt_folder_color(str(fid))
                             continue
                         if event.button != 1:
+                            continue
+                        if hit == "section" and payload:
+                            sid, is_chevron = payload
+                            if is_chevron and sid:
+                                self._clear_all_list_drags()
+                                self._toggle_folder_collapse(str(sid))
                             continue
                         if hit == "folder" and payload:
                             fid, is_chevron = payload
@@ -6615,6 +6695,8 @@ class MapEditor:
                         self.event_sprite_modal.handle_mouse_up(*event.pos, event.button)
                     if self.wild_encounter_modal.open:
                         self.wild_encounter_modal.handle_mouse_up(*event.pos, event.button)
+                    if self.npc_sprite_editor_modal.open:
+                        self.npc_sprite_editor_modal.handle_mouse_up(*event.pos, event.button)
                     if self.audio_engine_modal.open:
                         self.audio_engine_modal.handle_mouse_up(*event.pos, event.button)
                     if self.battle_editor_modal.open:
@@ -6804,6 +6886,9 @@ class MapEditor:
                             continue
                     if self.wild_encounter_modal.open:
                         if self.wild_encounter_modal.handle_keydown(event):
+                            continue
+                    if self.npc_sprite_editor_modal.open:
+                        if self.npc_sprite_editor_modal.handle_key(event):
                             continue
                     if self.audio_engine_modal.open:
                         if self.audio_engine_modal.handle_keydown(event):

@@ -1,6 +1,62 @@
 # Issue tracker
 
-# Issue tracker
+## FEATURE-MAP-099
+
+```
+ID: FEATURE-MAP-099
+TYPE: FEATURE
+TITLE: Collapsible tileset list panel and Unfiled section collapse
+
+DESCRIPTION:
+Left tileset panel can collapse to a ~28px strip so the map canvas gains horizontal
+space; state persists in map_editor_config.json tilesetList.collapsed. The Unfiled
+section uses section:unfiled in editorTilesetFolders.collapsed with chevron toggle;
+unfiled tilesets indent 20px under the section header.
+
+EXPECTED_BEHAVIOR:
+- Collapse/expand chevron on tileset panel header; relayout widens map viewport.
+- Unfiled section collapses like folders; children hidden when collapsed.
+
+SCOPE:
+tools/map_editor.py (relayout, draw, hit-test, config)
+
+PRIORITY: MEDIUM
+STATUS: DONE
+ASSIGNED_TO: Cursor
+
+FIX:
+_tileset_list_collapsed + _set_tileset_list_collapsed; SECTION_UNFILED_ID in row
+builder; section chevron hit-test; TILESET_LIST_COLLAPSED_W relayout.
+```
+
+## FEATURE-MAP-100
+
+```
+ID: FEATURE-MAP-100
+TYPE: FEATURE
+TITLE: NPC sprite sheet editor modal
+
+DESCRIPTION:
+Events launcher third row opens NPC Sprites editor: 4 directions × 4 walk frames,
+pixel paint/erase, mirror-lock Right from Left, walk helpers (idle→F3, dup prev),
+reference PNG beside canvas, configurable sheet size (default 128×192), export to
+src/Graphics/Characters/ as 4×4 grid for EventSpriteModal.
+
+EXPECTED_BEHAVIOR:
+- Launch from Events hub → NPC Sprites.
+- Edit frames, save PNG; non-128×192 shows warning.
+
+SCOPE:
+tools/npc_sprite_sheet_helpers.py, tools/npc_sprite_editor_modal.py,
+tools/events_launcher_modal.py, tools/map_editor.py
+
+PRIORITY: MEDIUM
+STATUS: DONE
+ASSIGNED_TO: Cursor
+
+FIX:
+New helpers + modal; wired into map_editor input/draw/blocking; launcher button.
+```
 
 ## BUG-MAP-096
 

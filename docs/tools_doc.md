@@ -38,6 +38,7 @@ TOOL: tools/map_editor.py
         Contains `MapEditor` class with UI loop, drawing routines, and edit operations (paint/fill/undo/redo/layer ops).
 
         BUG-MAP-096/097/098 + QA audit (2026): wild canvas loads/persists wild data on open/close/Save; session map cache includes wild fields with LRU cap (`SESSION_MAP_CACHE_MAX`); tile blits use scaled-tile LRU cache; map tile loop skipped under blocking modals; palette thumb, tileset list rows, valid-stands coverage grid, sheet cache, and wild overlay surfaces are cached/reused; world node overlap fixup throttled during drag (`WORLD_FIXUP_THROTTLE_MS`). Tests: `tests/test_map_editor_qa_audit.py`.
+        FEATURE-MAP-099/100: collapsible tileset panel + NPC sprite editor modal (`npc_sprite_editor_modal`, launcher NPC Sprites row).
         REFACTOR-CPP-PY-001: module constant `_CONFIRM_DIALOG_YES_KEYS` (`Return`, `y`) is shared by layer-remove, tileset-delete, and map-delete confirm branches (numpad Enter intentionally not included there; `_ENTER_KEYS` still covers prompts that accept both Return keys).
         FEATURE-MAP-WORLD-001 / BUG-MAP-WORLD-002 / FEATURE-MAP-WORLD-004 / FEATURE-MAP-WORLD-008: toolbar `#` toggles world workspace over the map canvas (thumbnails, pan/zoom, context menu, separate world undo/redo when the cursor is over the canvas). **World units are map tiles:** `widthPx`/`heightPx` on each node equal `mapWidthTiles`/`mapHeightTiles`; `world_cam_zoom` is pixels per world tile (default `8`). Legacy layouts where extents were `8 × tileCount` migrate on load (`WORLD_LEGACY_WORLD_PX_PER_TILE`); camera `x`/`y`/`zoom` rescale accordingly. Node origins snap to integer tile coords (`round` to nearest tile; BUG-MAP-WORLD-009) after add, paste, and drag release. Overlap fixup pushes by exactly the overlap amount (`eps=0`, BUG-MAP-WORLD-009) so adjacent (touching, sep=0) placement is allowed. Proximity **preview** lines include `sep == 0` (touching maps show a green connection); export graph also includes `sep == 0` via `build_proximity_edges`. `WORLD_PX_PER_MAP_TILE` applies only to thumbnail rasterization inside the palette-style thumb builder, not to world node size. Large-map thumbnails clamp per-tile draw size (`WORLD_THUMB_CELL_PX_MIN`) and omit dense cell grids when tiles would be sub-5 px. RMB menu toggles `interior` (overlap allowed); non-interior nodes are pushed to non-overlapping (touching allowed) while dragging. Proximity links (green) draw when AABB separation is within `WORLD_EDGE_SNAP_TILES` (including sep=0) (tile units; export `edgeSnapPx` uses the same). FEATURE-MAP-030: editor **3.0**; toolbar **E** opens popover (**NPC Events** | **Wild Encounters**). NPC Events: 2×2 anchors, scripts under `src/maps/scripts/`, sprites from `src/Graphics/Characters`, Pokemon Icons, Icons shiny. FEATURE-MAP-050 wild mode: `layers.wildEncounter` + `wildPatches[]` sidebar. Snapshot `tools/backup_map_editor_v3/`. Opcodes: `docs/event_script_ops.md`. Validate: `python3 tools/validate_map_events.py`. Version shown in pygame title. `src/maps/world_layout.json` is excluded from the open-map list, `maps_index.json`, and `refresh_map_file_list`.
         FEATURE-MAP-041 / FEATURE-MAP-085 / IMPROVEMENT-MAP-094: **Help** toolbar button and **H** (`toggle_help`) open the modal help guide on a context-appropriate tab (`_help_default_tab_for_context`: Event Engine open → **Script Ops**; events/wild workspace or launcher → **Events**; otherwise **Contents**). **Settings** (gear) opens help directly on the **Settings** tab (layer add/remove, key rebinding; legacy `settings_open` overlay removed). Tabs: Contents, **Editing modes** (merged paint/walk/transparent/over-player), Map & exits, Events, World, Keys, Script Ops, Settings. Contents uses grouped TOC headings; number keys **1–7** jump to topics. Global **search** box below the tab bar filters all help body text; click a result to jump. Scroll with mouse wheel; Esc closes (clears search when the search box is focused).
@@ -235,7 +236,72 @@ TOOL: tools/wild_encounter_modal.py
         that mutate wild data while a different-map scope is active — apply_species, _commit_edit
         (step/weight), handle_mouse_up (after paint_cells), add/remove row buttons (local and
         global), and patch-panel delegate (ed._wild_handle_panel_click). This ensures
-        `wild_modal_switch_map` and `wild_modal_end` correctly flush the buffered session.
+        `        wild_modal_switch_map` and `wild_modal_end` correctly flush the buffered session.
+
+        FEATURE-MAP-099: left tileset list panel collapses to `TILESET_LIST_COLLAPSED_W` (28px) via
+        header chevron; persisted in `map_editor_config.json` → `tilesetList.collapsed`. Unfiled
+        section uses `section:unfiled` in `editorTilesetFolders.collapsed`; child tilesets indent
+        `TILESET_LIST_CHILD_INDENT_PX` (20).
+
+TOOL: tools/npc_sprite_sheet_helpers.py
+
+    PURPOSE:
+        FEATURE-MAP-100: pure helpers for 4×4 NPC character sheet layout, frame indexing,
+        horizontal mirror, and PNG filename sanitization.
+
+    USAGE:
+        Imported by `tools/npc_sprite_editor_modal.py` and unit tests.
+
+    INPUT:
+        Sheet dimensions, direction names, RGBA pixel grids, Characters directory path.
+
+    OUTPUT:
+        Validated dimensions, frame indices, mirrored grids, sorted PNG basenames.
+
+    DEPENDENCIES:
+        Python 3 standard library (pathlib only).
+
+    SIDE EFFECTS:
+        None (pure functions except list_character_pngs reads directory).
+
+    ERROR HANDLING:
+        validate_sheet_dimensions returns (False, message) for non-divisible sizes.
+
+    NOTES:
+        Default sheet 128×192 (32×48 cells). Tests: `tests/test_npc_sprite_sheet_helpers.py`.
+
+TOOL: tools/npc_sprite_editor_modal.py
+
+    PURPOSE:
+        FEATURE-MAP-100: pygame modal to paint NPC walk sprites on a 4×4 sheet grid and export
+        PNGs to `src/Graphics/Characters/` for EventSpriteModal.
+
+    USAGE:
+        Opened from Events launcher → NPC Sprites. Back returns to launcher.
+
+    INPUT:
+        Mouse (paint/erase, direction/frame tabs, palette), keyboard (Save As filename, Ctrl+Z/Y,
+        dimension fields), wheel (zoom on canvas).
+
+    OUTPUT:
+        PNG files under Characters/; on-screen preview with optional reference sheet pane.
+
+    DEPENDENCIES:
+            - pygame
+            - tools/npc_sprite_sheet_helpers.py
+            - tools/modal_text.py
+            - tools/map_editor.py (MapEditor)
+
+    SIDE EFFECTS:
+        Writes PNG to disk on Save / Save As.
+
+    ERROR HANDLING:
+        Status messages for invalid dimensions, missing files, save failures.
+
+    NOTES:
+        Mirror-lock (default on) copies Left row to mirrored Right row after left edits.
+        Walk helpers: Idle→F3, Dup prev. Non-128×192 warns via sheet_dimensions_warning.
+        Tests: `tests/test_npc_sprite_editor_modal.py`.
 
 TOOL: tools/validate_map_events.py
 
@@ -775,14 +841,15 @@ TOOL: tools/sync_pokemon_from_graphics.py
 TOOL: tools/events_launcher_modal.py
 
     PURPOSE:
-        EventsLauncherModal — UI-Standard launcher modal (FEATURE-MAP-064). Opened by the E
-        toolbar button (LMB) or V key (`open_events_launcher`). Presents a 2×3 grid: Event Engine |
-        Wild Encounters · Audio Engine | Battle Editor · Help (full width).
+        EventsLauncherModal — UI-Standard launcher modal (FEATURE-MAP-064/100). Opened by the E
+        toolbar button (LMB) or V key (`open_events_launcher`). Presents Event Engine |
+        Wild Encounters · Audio Engine | Battle Editor · NPC Sprites (full width) · Help (full width).
 
     USAGE:
         Instantiated in MapEditor.__init__. Opened via events_btn_rect LMB or V key.
         Calls ed.event_engine_modal.open_modal(), ed.wild_encounter_modal.open_modal(),
-        ed.audio_engine_modal.open_modal(), ed.battle_editor_modal.open_modal(), or
+        ed.audio_engine_modal.open_modal(), ed.battle_editor_modal.open_modal(),
+        ed.npc_sprite_editor_modal.open_modal(), or
         ed._open_help_overlay(tab="home", back_to="launcher") on button press.
 
     INPUT:
@@ -798,6 +865,7 @@ TOOL: tools/events_launcher_modal.py
             - tools/wild_encounter_modal.py (WildEncounterModal)
             - tools/audio_engine_modal.py (AudioEngineModal)
             - tools/battle_editor_modal.py (BattleEditorModal)
+            - tools/npc_sprite_editor_modal.py (NpcSpriteEditorModal)
 
     SIDE EFFECTS:
         Opens or closes peer modals; updates _panel_override (session-persisted).
