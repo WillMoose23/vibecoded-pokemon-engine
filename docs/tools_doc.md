@@ -1291,3 +1291,32 @@ TOOL: tests/test_phase8_verify.py
     NOTES:
         Requires dummy SDL driver for CI/headless environments. Full interactive mouse/keyboard
         matrix still optional for human QA; this phase automates layout and handler contracts.
+
+TOOL: tools/generate_github_guide_pdf.py
+
+    PURPOSE:
+        Build the printable Git/GitHub workflow and fresh-environment setup guide PDF for this
+        repository (`docs/github-and-setup-guide.pdf`).
+
+    USAGE:
+        python3 tools/generate_github_guide_pdf.py
+
+    INPUT:
+        Embedded guide content in the script (branch model, glossary, clone/build/test steps,
+        commit/pull/push/merge/reset commands).
+
+    OUTPUT:
+        `docs/github-and-setup-guide.pdf` (multi-page reference document).
+
+    DEPENDENCIES:
+        Python 3, fpdf2 (`python3 -m pip install --user fpdf2`).
+
+    SIDE EFFECTS:
+        Overwrites `docs/github-and-setup-guide.pdf` when run.
+
+    ERROR HANDLING:
+        Exits with traceback if fpdf2 is missing or PDF write fails.
+
+    NOTES:
+        Regenerate after changing project branch policy or setup steps. Uses ASCII-only text for
+        Helvetica/Courier core fonts.
