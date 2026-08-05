@@ -2,6 +2,133 @@
 
 # Issue tracker
 
+## BUG-MAP-096
+
+```
+ID: BUG-MAP-096
+TYPE: BUG
+TITLE: Wild canvas mode crashes draw() when wildEncounter grid was never loaded
+
+DESCRIPTION:
+FEATURE-MAP-098 main-map wild canvas opens via Events launcher RMB or
+_open_wild_canvas_mode() without calling _load_wild_data_for_scope(). On a fresh
+map load, wild_encounter remains [] while draw() indexes wild_encounter[y][x]
+when wild_canvas_mode_open is True.
+
+STEPS_TO_REPRODUCE:
+1. Launch map editor (try_load_map_by_id loads tiles only; wild_encounter len 0).
+2. Open wild canvas mode (Events launcher Wild RMB or _open_wild_canvas_mode()).
+3. Observe draw() on next frame.
+
+EXPECTED_BEHAVIOR:
+Wild overlay renders; wild_encounter grid matches map_w × map_h (loaded from disk or zero-filled).
+
+ACTUAL_BEHAVIOR:
+IndexError: list index out of range in draw() at wild_encounter[y][x].
+
+SCOPE:
+tools/map_editor.py (_open_wild_canvas_mode, draw, try_load_map_by_id)
+
+PRIORITY: CRITICAL
+STATUS: DONE
+ASSIGNED_TO: Cursor
+
+ROOT CAUSE (audit):
+_open_wild_canvas_mode and try_load_map_by_id never allocate/load wild_encounter;
+only wild_modal_switch_map calls _load_wild_data_for_scope.
+
+FIX:
+_open_wild_canvas_mode calls _sync_wild_data_for_map; try_load_map_by_id calls it
+after disk load; _ensure_wild_encounter_grid / _resize_wild_encounter_grid guard draw().
+```
+
+## BUG-MAP-097
+
+```
+ID: BUG-MAP-097
+TYPE: BUG
+TITLE: Map switch via try_load_map_by_id leaves stale wild_encounter grid
+
+DESCRIPTION:
+Session cache (_snapshot_session_map_bundle) omits wild_encounter, wild_patches,
+and wild_global_encounters. try_load_map_by_id also does not reload wild data
+from disk. After editing wild data or switching map dimensions, wild_encounter
+can be wrong size or show another map's patches — IndexError if new map is taller
+than the stale grid.
+
+STEPS_TO_REPRODUCE:
+1. Load map A; call _load_wild_data_for_scope(A) so wild_encounter is 10×12.
+2. Increase map_h/map_w (or try_load_map_by_id to a larger map B).
+3. Enable wild_canvas_mode_open and call draw().
+
+EXPECTED_BEHAVIOR:
+wild_encounter resizes/reloads whenever the active map changes.
+
+ACTUAL_BEHAVIOR:
+IndexError when y >= len(wild_encounter), or wrong overlay data when map shrinks.
+
+SCOPE:
+tools/map_editor.py (try_load_map_by_id, _snapshot_session_map_bundle,
+_restore_session_map_bundle, event_engine_modal._load_events_for_map when
+selectSwitchesMainMap is enabled)
+
+PRIORITY: HIGH
+STATUS: DONE
+ASSIGNED_TO: Cursor
+
+ROOT CAUSE (audit):
+Wild scope state is managed only inside wild_modal_* helpers, not integrated
+with general map load/session-switch paths.
+
+FIX:
+Session bundle now includes wild fields; _restore_session_map_bundle restores them;
+resize_map calls _resize_wild_encounter_grid; try_load_map_by_id syncs wild from
+disk on cold load; SESSION_MAP_CACHE_MAX LRU caps session RAM.
+```
+
+## BUG-MAP-098
+
+```
+ID: BUG-MAP-098
+TYPE: BUG
+TITLE: Main-map wild canvas edits are not persisted on exit or Save
+
+DESCRIPTION:
+_wild_canvas_paint_cells mutates wild_encounter in memory but never sets
+_wild_modal_dirty. _close_wild_canvas_mode (Esc) does not call
+_persist_wild_data_for_scope. _write_map_json_to_disk (Ctrl+S) omits
+wildPatches / layers.wildEncounter entirely. Canvas-mode work is lost unless
+the user re-opens the Wild modal (which uses a separate persist path).
+
+STEPS_TO_REPRODUCE:
+1. Load wild data for current map; paint cells in wild canvas mode.
+2. Press Esc or Save map (Ctrl+S).
+3. Reload map JSON from disk.
+
+EXPECTED_BEHAVIOR:
+wildEncounter grid and wildPatches written to the map JSON.
+
+ACTUAL_BEHAVIOR:
+Disk JSON unchanged for wild fields after canvas-only edit session.
+
+SCOPE:
+tools/map_editor.py (_wild_canvas_paint_cells, _close_wild_canvas_mode,
+_write_map_json_to_disk, save)
+
+PRIORITY: HIGH
+STATUS: DONE
+ASSIGNED_TO: Cursor
+
+ROOT CAUSE (audit):
+Wild persistence is scoped to wild_modal_* lifecycle; FEATURE-MAP-098 canvas path
+was wired for painting/rendering but not for dirty tracking or save integration.
+
+FIX:
+_wild_canvas_paint_cells calls _mark_wild_dirty; _close_wild_canvas_mode persists
+when dirty; _write_map_json_to_disk merges wild via _apply_wild_fields_to_map_data.
+```
+```
+
 ## IMPROVEMENT-MAP-097
 
 ```

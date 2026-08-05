@@ -1429,7 +1429,66 @@ FILE: tools/map_editor.py
         Missing/corrupt target map JSON is treated as an empty wild-data scope; write failures are silently skipped (OSError/JSONDecodeError caught).
 
     DEPENDENCIES:
-        `_snapshot_session_map_bundle`, `_restore_session_map_bundle`, `try_load_map_by_id`, `_load_wild_data_for_scope`, `_persist_wild_data_for_scope`
+        `_snapshot_session_map_bundle`, `_restore_session_map_bundle`, `try_load_map_by_id`, `_load_wild_data_for_scope`, `_persist_wild_data_for_scope`, `_sync_wild_data_for_map`, `_ensure_wild_encounter_grid`
+
+    FUNCTION: MapEditor._resize_wild_encounter_grid / _ensure_wild_encounter_grid / _sync_wild_data_for_map / _apply_wild_fields_to_map_data / _mark_wild_dirty
+
+    SIGNATURE:
+        def _resize_wild_encounter_grid(self, nw: int, nh: int) -> None
+        def _ensure_wild_encounter_grid(self) -> None
+        def _sync_wild_data_for_map(self, map_id: str) -> None
+        def _apply_wild_fields_to_map_data(self, data: dict) -> None
+        def _mark_wild_dirty(self) -> None
+
+    DESCRIPTION:
+        BUG-MAP-096/097/098: wild encounter grid lifecycle integrated with map load, session cache, resize, canvas paint, and Save. `_sync_wild_data_for_map` loads wild fields from disk after cold `try_load_map_by_id`; session bundles now include wild patches/grid/dirty flag. `_apply_wild_fields_to_map_data` merges wild JSON used by `_persist_wild_data_for_scope` and `_write_map_json_to_disk`. `_mark_wild_dirty` sets the persist gate for canvas and panel edits.
+
+    PARAMETERS:
+        - nw, nh: int — target map dimensions (_resize_wild_encounter_grid)
+        - map_id: str — map stem to load wild data for (_sync_wild_data_for_map)
+        - data: dict — map JSON object to mutate in place (_apply_wild_fields_to_map_data)
+
+    RETURNS:
+        None
+
+    SIDE EFFECTS:
+        Mutates `wild_encounter`, `wild_patches`, `wild_global_encounters`, `_wild_modal_dirty`; may write map JSON when persist/save paths run
+
+    ERROR HANDLING:
+        Missing map JSON yields empty wild scope; OSError on persist is skipped
+
+    DEPENDENCIES:
+        `_load_wild_data_for_scope`, `sanitize_map_id`, `MAPS_DIR`
+
+    FUNCTION: MapEditor.blit_tile_scaled / blit_wild_encounter_cell_overlay
+
+    SIGNATURE:
+        def blit_tile_scaled(self, surf: pygame.Surface, ts_id: str, tile_1based: int, dst_x: int, dst_y: int, dst_wh: int) -> None
+        def blit_wild_encounter_cell_overlay(self, surf: pygame.Surface, px: int, py: int, cp: int, *, active: bool, selected: bool = False) -> None
+
+    DESCRIPTION:
+        QA audit performance: `blit_tile_scaled` LRU-caches scaled tile surfaces keyed by `(ts_id, tile_1based, dst_wh)` up to `SCALED_TILE_CACHE_MAX`. `blit_wild_encounter_cell_overlay` reuses pre-filled SRCALPHA overlays for active/inactive wild cells (selected cells still allocate a blue highlight). `draw()` skips the main map tile loop when `_any_blocking_modal_open()` to avoid redundant raster work under modals.
+
+    PARAMETERS:
+        - surf: pygame.Surface — destination surface
+        - ts_id: str — tileset id (blit_tile_scaled)
+        - tile_1based: int — 1-based tile index (blit_tile_scaled)
+        - dst_x, dst_y, dst_wh: int — destination pixel rect (blit_tile_scaled)
+        - px, py, cp: int — cell origin and size (blit_wild_encounter_cell_overlay)
+        - active: bool — highlight active wild patch index (blit_wild_encounter_cell_overlay)
+        - selected: bool — flood-fill selection tint (blit_wild_encounter_cell_overlay)
+
+    RETURNS:
+        None
+
+    SIDE EFFECTS:
+        Blits to surf; may populate `_scaled_tile_cache` or `_wild_overlay_*` surfaces
+
+    ERROR HANDLING:
+        No-op when tile_1based <= 0 or tileset missing
+
+    DEPENDENCIES:
+        `ensure_sheet`, `pygame.transform.scale`, `_ensure_wild_overlay_surfaces`
 
     FUNCTION: MapEditor._draw_events_character_frame_overlay
 
@@ -1799,7 +1858,7 @@ FILE: tools/map_editor.py
         def _wild_canvas_panel_click(self, mx: int, my: int) -> bool
 
     DESCRIPTION:
-        FEATURE-MAP-098: dual-path wild editing on the main map canvas (alongside `WildEncounterModal`). `_open_wild_canvas_mode` sets `wild_canvas_mode_open`, ensures a default patch, and shrinks `map_canvas_rect` by `_WILD_CANVAS_PANEL_W` for a right-side patch panel. LMB/RMB drag on the main map paints or erases `layers.wildEncounter` indices with stride snap (`_wild_snap_cell`). Esc closes canvas mode. The Wild modal "Main map" button and Events launcher Wild RMB call `_open_wild_canvas_mode`; "Full Wild editor…" on the panel reopens the modal.
+        FEATURE-MAP-098: dual-path wild editing on the main map canvas (alongside `WildEncounterModal`). `_open_wild_canvas_mode` sets `wild_canvas_mode_open`, calls `_sync_wild_data_for_map` for the active map, ensures a default patch, and shrinks `map_canvas_rect` by `_WILD_CANVAS_PANEL_W` for a right-side patch panel. LMB/RMB drag on the main map paints or erases `layers.wildEncounter` indices with stride snap (`_wild_snap_cell`); each stroke calls `_mark_wild_dirty`. Esc closes canvas mode via `_close_wild_canvas_mode`, which persists dirty wild data to disk. Ctrl+S includes wild fields through `_write_map_json_to_disk` → `_apply_wild_fields_to_map_data`. The Wild modal "Main map" button and Events launcher Wild RMB call `_open_wild_canvas_mode`; "Full Wild editor…" on the panel reopens the modal.
 
     PARAMETERS:
         - x0, y0, x1, y1: int — inclusive map cell bounds for a paint stroke (_wild_canvas_paint_cells)
@@ -1816,7 +1875,7 @@ FILE: tools/map_editor.py
         Out-of-bounds cells are skipped during paint; panel clicks outside the docked rect return False from `_wild_canvas_panel_click`
 
     DEPENDENCIES:
-        `_wild_snap_cell`, `_wild_default_patch`, `_wild_handle_panel_click`, `snap_cell_to_stride_grid`, `WildEncounterModal.close_modal(switch_to_canvas=True)`
+        `_sync_wild_data_for_map`, `_mark_wild_dirty`, `_persist_wild_data_for_scope`, `_wild_snap_cell`, `_wild_default_patch`, `_wild_handle_panel_click`, `snap_cell_to_stride_grid`, `WildEncounterModal.close_modal(switch_to_canvas=True)`
 
     FUNCTION: MapEditor._open_help_overlay / _close_help_overlay
 

@@ -54,12 +54,15 @@ class TestWildCanvasMode(unittest.TestCase):
         ed = mock.Mock(spec=MapEditor)
         ed.wild_encounter_modal = mock.Mock()
         ed.wild_encounter_modal.open = False
+        ed.map_id = "sample_room"
+        ed._sync_wild_data_for_map = mock.Mock()
         ed._ensure_default_wild_patch = mock.Mock()
         ed.set_status = mock.Mock()
 
         MapEditor._open_wild_canvas_mode(ed)
         self.assertTrue(ed.wild_canvas_mode_open)
         self.assertTrue(ed.wild_encounter_mode_open)
+        ed._sync_wild_data_for_map.assert_called_once_with("sample_room")
         ed._ensure_default_wild_patch.assert_called_once()
 
     def test_wild_canvas_paint_cells(self) -> None:
@@ -83,9 +86,11 @@ class TestWildCanvasMode(unittest.TestCase):
             "stepChancePercent": 10,
             "encounters": {"common": [], "uncommon": [], "rare": []},
         }
+        ed._mark_wild_dirty = mock.Mock()
 
         MapEditor._wild_canvas_paint_cells(ed, 1, 1, 1, 1, 1)
         self.assertEqual(ed.wild_encounter[1][1], 2)
+        ed._mark_wild_dirty.assert_called_once()
 
     def test_layout_reserves_panel_width_in_canvas_mode(self) -> None:
         import sys
