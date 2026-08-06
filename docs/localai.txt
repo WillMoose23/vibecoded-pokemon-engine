@@ -1,0 +1,8 @@
+base url: https://frosty-corporate-getaway.ngrok-free.dev/v1
+
+api key: ollama
+
+models: 
+
+
+qwen2.5-coder:32b-instruct-q8_0
