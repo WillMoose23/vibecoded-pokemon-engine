@@ -1,0 +1,55 @@
+---
+description: Track all uncommitted changes in a session changelog so commits include a complete summary for the tracker.
+alwaysApply: true
+---
+
+# Change Tracking — Session Changelog
+
+## Purpose
+
+Maintain a running list of changes made since the last commit so that when the user asks to commit or push, everything is accounted for in the commit message and tracker.
+
+---
+
+## Rules
+
+1. **After every meaningful code change**, append a short entry to `/docs/session_changelog.md` describing:
+   - Which file(s) changed
+   - What was done (1 sentence)
+   - Related tracker ID (if any)
+
+2. **Format** — one entry per change block:
+
+```
+- [tools/map_editor.py] Removed bottom footer pane and added status toast overlay (IMPROVEMENT-MAP-098)
+- [docs/tracker.md] Added IMPROVEMENT-MAP-098 entry
+- [docs/tools_doc.md] Updated footer references for IMPROVEMENT-MAP-098
+```
+
+3. **On commit** — when the user says commit, push, or similar:
+   - Read `/docs/session_changelog.md`
+   - Include its contents in the commit message body under a `Changes:` section
+   - After a successful commit, **clear** the file (leave only the header)
+
+4. **File template** — if the file does not exist, create it with:
+
+```markdown
+# Session Changelog (since last commit)
+
+```
+
+5. **Do not** log trivial actions (reading files, running tests, checking status). Only log actual file modifications.
+
+6. **Do not** duplicate tracker entries — the changelog is a quick-reference list for commit time, not a replacement for `/docs/tracker.md`.
+
+---
+
+## On commit workflow
+
+```
+1. Read /docs/session_changelog.md
+2. Use entries to build the commit message body
+3. Stage all relevant files (including session_changelog.md itself in cleared state)
+4. Commit
+5. Clear the changelog back to just the header
+```

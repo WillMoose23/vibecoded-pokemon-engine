@@ -6,14 +6,15 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
+HELPERS = Path(__file__).resolve().parent
 
 
 def main() -> int:
     scripts = ("sync_cursor_plans.py", "sync_cursor_skills.py")
     rc = 0
     for name in scripts:
-        path = ROOT / "tools" / name
+        path = HELPERS / name
         proc = subprocess.run([sys.executable, str(path)], cwd=ROOT)
         if proc.returncode != 0:
             rc = proc.returncode

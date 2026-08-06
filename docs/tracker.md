@@ -1,6 +1,203 @@
 # Issue tracker
 
-# Issue tracker
+## BUG-MAP-101
+
+```
+ID: BUG-MAP-101
+TYPE: BUG
+TITLE: NPC sprite editor paint offset increases toward bottom of grid; UI text clipped
+
+DESCRIPTION:
+_pixel_at_canvas divides both X and Y by the same _zoom value, but the canvas
+draws a non-square cell (32×48) stretched into a square rect. The Y divisor is
+wrong, so painted pixels land progressively further from the cursor as Y grows.
+Additionally, toolbar buttons use hard-coded X offsets that clip on narrow panels,
+and the reference/filename labels overflow.
+
+STEPS_TO_REPRODUCE:
+1. Open Events → NPC Sprites.
+2. Paint pixels at the very bottom of the edit grid.
+3. Observe the painted pixel is offset upward from the cursor.
+4. Resize the modal narrower; observe clipped toolbar text.
+
+EXPECTED_BEHAVIOR:
+Painted pixel matches cursor position at all grid rows; all labels visible.
+
+ACTUAL_BEHAVIOR:
+Y offset grows linearly toward the bottom; toolbar buttons clip on narrow panels.
+
+SCOPE:
+tools/npc_sprite_editor_modal.py (_pixel_at_canvas, draw layout)
+
+PRIORITY: HIGH
+STATUS: DONE
+ASSIGNED_TO: Cursor
+
+ROOT CAUSE:
+_pixel_at_canvas used a single _zoom divisor for both axes, but the canvas maps a
+non-square cell (32w × 48h) into a square rect, making step_y != step_x. Fixed
+toolbar used absolute x-offsets instead of relative packing.
+
+FIX:
+Aspect-correct canvas sizing, per-axis _cell_step_x/y in hit-test, responsive
+toolbar layout with mtext.truncate_to_width for labels.
+```
+
+## FEATURE-MAP-102
+
+```
+ID: FEATURE-MAP-102
+TYPE: FEATURE
+TITLE: NPC sprite editor tools, RGBA layers, left rail layout
+
+DESCRIPTION:
+Left tool rail with Paint (P), Eraser (E), Fill (F), RGBA sliders, layer stack
+(visibility, lock, rename, add/remove), centered canvas matching reference at
+zoom 8, configurable preset swatches below canvas.
+
+EXPECTED_BEHAVIOR:
+- Tools exclusive-select via P/E/F and rail buttons
+- Composite visible layers on Save; flood fill opaque-connected regions
+- Locked layers selectable but not editable
+
+SCOPE:
+tools/npc_sprite_editor_modal.py, tools/npc_sprite_sheet_helpers.py
+
+PRIORITY: HIGH
+STATUS: DONE
+ASSIGNED_TO: Cursor
+```
+
+## FEATURE-MAP-103
+
+```
+ID: FEATURE-MAP-103
+TYPE: FEATURE
+TITLE: Map editor tile layer lock
+
+DESCRIPTION:
+Editor-only lock per tile layer; blocks paint, fill, and eraser on locked active
+layer. Lock icon on layer chip and Settings tile layer list.
+
+EXPECTED_BEHAVIOR:
+Click lock toggles; undo restores lock flags; not persisted in map JSON.
+
+SCOPE:
+tools/map_editor.py
+
+PRIORITY: MEDIUM
+STATUS: DONE
+ASSIGNED_TO: Cursor
+```
+
+## FEATURE-MAP-104
+
+```
+ID: FEATURE-MAP-104
+TYPE: FEATURE
+TITLE: NPC Sprites help tab and swatch editor
+
+DESCRIPTION:
+Help button on NPC Sprite Editor modal; Help → NPC Sprites tab documents every
+tool. Edit Swatches overlay saves palette to map_editor_config.json npcSpriteEditor.
+
+EXPECTED_BEHAVIOR:
+Help opens npc_sprites tab with back_to npc; swatch colors persist in config.
+
+SCOPE:
+tools/npc_sprite_editor_modal.py, tools/map_editor.py, tools/map_editor_config.json
+
+PRIORITY: MEDIUM
+STATUS: DONE
+ASSIGNED_TO: Cursor
+```
+
+## IMPROVEMENT-MAP-098
+
+```
+ID: IMPROVEMENT-MAP-098
+TYPE: IMPROVEMENT
+TITLE: Remove bottom footer pane — reclaim vertical space for map/palette
+
+DESCRIPTION:
+The reserved bottom footer strip (24% of window height) is removed. Map metadata
+now appears in the layer chip; transient status messages appear as a toast overlay
+on the map viewport. Mode hint text (walk, over-player, valid-stand) is removed
+from the footer since it duplicates the H help guide and the map canvas overlays.
+
+EXPECTED_BEHAVIOR:
+- No bottom pane visible; palette, tileset list, and map viewport extend to the
+  window bottom margin.
+- set_status() messages render as a semi-transparent bar at the bottom of the map
+  viewport area (auto-expires as before).
+- Inline map-id / connection prompts appear in the same toast overlay.
+- Map id and dimensions shown in the layer chip.
+
+SCOPE:
+tools/map_editor.py (relayout, draw, _draw_map_status_overlay)
+
+PRIORITY: LOW
+STATUS: DONE
+ASSIGNED_TO: Cursor
+```
+
+## FEATURE-MAP-099
+
+```
+ID: FEATURE-MAP-099
+TYPE: FEATURE
+TITLE: Collapsible tileset list panel and Unfiled section collapse
+
+DESCRIPTION:
+Left tileset panel can collapse to a ~28px strip so the map canvas gains horizontal
+space; state persists in map_editor_config.json tilesetList.collapsed. The Unfiled
+section uses section:unfiled in editorTilesetFolders.collapsed with chevron toggle;
+unfiled tilesets indent 20px under the section header.
+
+EXPECTED_BEHAVIOR:
+- Collapse/expand chevron on tileset panel header; relayout widens map viewport.
+- Unfiled section collapses like folders; children hidden when collapsed.
+
+SCOPE:
+tools/map_editor.py (relayout, draw, hit-test, config)
+
+PRIORITY: MEDIUM
+STATUS: DONE
+ASSIGNED_TO: Cursor
+
+FIX:
+_tileset_list_collapsed + _set_tileset_list_collapsed; SECTION_UNFILED_ID in row
+builder; section chevron hit-test; TILESET_LIST_COLLAPSED_W relayout.
+```
+
+## FEATURE-MAP-100
+
+```
+ID: FEATURE-MAP-100
+TYPE: FEATURE
+TITLE: NPC sprite sheet editor modal
+
+DESCRIPTION:
+Events launcher third row opens NPC Sprites editor: 4 directions × 4 walk frames,
+pixel paint/erase, mirror-lock Right from Left, walk helpers (idle→F3, dup prev),
+reference PNG beside canvas, configurable sheet size (default 128×192), export to
+src/Graphics/Characters/ as 4×4 grid for EventSpriteModal.
+
+EXPECTED_BEHAVIOR:
+- Launch from Events hub → NPC Sprites.
+- Edit frames, save PNG; non-128×192 shows warning.
+
+SCOPE:
+tools/npc_sprite_sheet_helpers.py, tools/npc_sprite_editor_modal.py,
+tools/events_launcher_modal.py, tools/map_editor.py
+
+PRIORITY: MEDIUM
+STATUS: DONE
+ASSIGNED_TO: Cursor
+
+FIX:
+New helpers + modal; wired into map_editor input/draw/blocking; launcher button.
+```
 
 ## BUG-MAP-096
 
@@ -142,13 +339,13 @@ synced from ~/.cursor/skills/, with sync_cursor_skills.py and sync_cursor_backup
 orchestrating plans + skills before push.
 
 EXPECTED_BEHAVIOR:
-- tools/sync_cursor_skills.py merges global skill folders into .cursor/skills/
-- tools/sync_cursor_backup.py runs plan + skill sync
+- docs/cursor_helper_scripts/sync_cursor_skills.py merges global skill folders into .cursor/skills/
+- docs/cursor_helper_scripts/sync_cursor_backup.py runs plan + skill sync
 - Git-Push-Development-Rule uses sync_cursor_backup.py
 - Project-only skills (planning-rule, event-script-opcode-docs, etc.) remain in repo
 
 SCOPE:
-.cursor/skills/, tools/sync_cursor_skills.py, tools/sync_cursor_backup.py,
+.cursor/skills/, docs/cursor_helper_scripts/sync_cursor_skills.py, docs/cursor_helper_scripts/sync_cursor_backup.py,
 .gitignore, .cursor/rules/Git-Push-Development-Rule.mdc, docs/tools_doc.md
 
 PRIORITY: MEDIUM
@@ -169,12 +366,12 @@ Cursor plan files (~/.cursor/plans/*.plan.md) were not backed up in git. Add
 committed to origin/development with other documented work.
 
 EXPECTED_BEHAVIOR:
-- tools/sync_cursor_plans.py copies ~/.cursor/plans → .cursor/plans/
+- docs/cursor_helper_scripts/sync_cursor_plans.py copies ~/.cursor/plans → .cursor/plans/
 - .gitignore tracks .cursor/plans/ (rest of .cursor/ stays ignored)
 - Git-Push-Development-Rule runs sync before every push
 
 SCOPE:
-.cursor/plans/, tools/sync_cursor_plans.py, .gitignore,
+.cursor/plans/, docs/cursor_helper_scripts/sync_cursor_plans.py, .gitignore,
 .cursor/rules/Git-Push-Development-Rule.mdc, docs/tools_doc.md
 
 PRIORITY: MEDIUM

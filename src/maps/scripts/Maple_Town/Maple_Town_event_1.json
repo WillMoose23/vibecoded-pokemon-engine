@@ -33,6 +33,11 @@
       }
     },
     {
+      "play_music_once": {
+        "track": ""
+      }
+    },
+    {
       "end_region": {}
     }
   ],

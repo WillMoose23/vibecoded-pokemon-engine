@@ -16,7 +16,8 @@ class HelpGuideTabsTest(unittest.TestCase):
             self.assertNotIn(legacy, tab_ids)
 
     def test_home_jump_tabs_match_number_keys(self) -> None:
-        self.assertEqual(len(HELP_HOME_JUMP_TABS), 7)
+        self.assertEqual(len(HELP_HOME_JUMP_TABS), 8)
+        self.assertIn("npc_sprites", HELP_HOME_JUMP_TABS)
         for tid in HELP_HOME_JUMP_TABS:
             self.assertTrue(any(t == tid for t, _ in HELP_GUIDE_TABS))
 

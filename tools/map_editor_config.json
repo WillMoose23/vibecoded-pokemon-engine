@@ -105,8 +105,29 @@
     "favorites": [],
     "fracLeft": 0.1869,
     "fracRight": 0.1369,
-    "fracLeftH": 0.2746,
+    "fracLeftH": 0.456,
     "fracMidV": 0.7121,
-    "collapsedCategories": []
+    "collapsedCategories": [],
+    "skipSubflowDeleteConfirm": false
+  },
+  "tilesetList": {
+    "collapsed": true
+  },
+  "npcSpriteEditor": {
+    "defaultZoom": 8,
+    "paletteColors": [
+      [0, 0, 0, 0],
+      [24, 24, 28, 255],
+      [48, 48, 56, 255],
+      [96, 96, 112, 255],
+      [200, 200, 210, 255],
+      [255, 220, 180, 255],
+      [220, 160, 120, 255],
+      [180, 80, 60, 255],
+      [60, 120, 200, 255],
+      [80, 180, 100, 255],
+      [220, 60, 60, 255],
+      [255, 210, 80, 255]
+    ]
   }
 }

@@ -102,6 +102,7 @@ except ImportError:
     sys.exit(1)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import modal_text as mtext
 from audio_engine_modal import AudioEngineModal
 from battle_editor_modal import BattleEditorModal
 from event_action_modal import EventActionModal
@@ -114,6 +115,7 @@ from events_launcher_modal import EventsLauncherModal
 from flag_registry_modal import EventFlagRegistryModal
 from wild_encounter_editor_helpers import snap_cell_to_stride_grid
 from wild_encounter_modal import WildEncounterModal
+from npc_sprite_editor_modal import NpcSpriteEditorModal
 
 _WILD_CANVAS_PANEL_W = 260
 
@@ -182,6 +184,8 @@ PALETTE_SCALE_MAX = 12  # FEATURE-MAP-015
 MAP_ZOOM_MIN = 8   # FEATURE-MAP-025
 MAP_ZOOM_MAX = 64  # FEATURE-MAP-025
 TILESET_LIST_W = 292
+TILESET_LIST_COLLAPSED_W = 28
+SECTION_UNFILED_ID = "section:unfiled"
 LIST_CLICK_DOUBLE = 0.45
 
 # FEATURE-MAP-041 / IMPROVEMENT-MAP-094: modal help guide — (tab_id, tab label)
@@ -190,6 +194,7 @@ HELP_GUIDE_TABS: tuple[tuple[str, str], ...] = (
     ("editing_modes", "Editing modes"),
     ("map_meta", "Map & exits"),
     ("events", "Events"),
+    ("npc_sprites", "NPC Sprites"),
     ("world", "World"),
     ("keys", "Keys"),
     ("script_ops", "Script Ops"),
@@ -200,6 +205,7 @@ HELP_HOME_JUMP_TABS: tuple[str, ...] = (
     "editing_modes",
     "map_meta",
     "events",
+    "npc_sprites",
     "world",
     "keys",
     "script_ops",
@@ -207,7 +213,7 @@ HELP_HOME_JUMP_TABS: tuple[str, ...] = (
 )
 TILESET_LIST_DRAG_THRESHOLD_PX = 4
 TILESET_LIST_ROW_LINES = 2
-TILESET_LIST_CHILD_INDENT_PX = 14  # IMPROVEMENT-MAP-015
+TILESET_LIST_CHILD_INDENT_PX = 20  # FEATURE-MAP-099 / IMPROVEMENT-MAP-015
 UNDO_STACK_MAX = 80
 MAP_EDITOR_TOOL_VERSION = "3.0"
 WORLD_LAYOUT_JSON_PATH = MAPS_DIR / WORLD_LAYOUT_JSON_NAME
@@ -744,6 +750,7 @@ class MapEditor:
         self.spacing = 0
         self.tile_layers: list[list[list[dict | None]]] = []
         self.tile_layer_ids: list[str] = []
+        self.tile_layer_locked: list[bool] = []
         self.active_layer_index = 0
         self.layer_remove_confirm_idx: int | None = None
         self.walk: list[list[int]] = []
@@ -764,10 +771,12 @@ class MapEditor:
         self.gear_rect = pygame.Rect(0, 0, 32, 32)
         self.world_btn_rect = pygame.Rect(0, 0, 32, 32)
         self.layer_chip_rect = pygame.Rect(0, 0, 1, 1)
+        self.layer_chip_lock_btn = pygame.Rect(0, 0, 1, 1)
         self.map_canvas_rect = pygame.Rect(0, 0, 1, 1)
         self.settings_add_event_rect = pygame.Rect(0, 0, 1, 1)
         self.settings_remove_event_rect = pygame.Rect(0, 0, 1, 1)
         self.settings_remove_current_layer_rect = pygame.Rect(0, 0, 1, 1)  # FEATURE-MAP-019
+        self._settings_tile_layer_row_rects: list[tuple[int, pygame.Rect, pygame.Rect]] = []
         self.palette_sel_h = self.font.get_linesize() + 6
         self.map_origin_x = 0
         self.map_origin_y = 0
@@ -818,7 +827,10 @@ class MapEditor:
         self.eraser_mode = False  # FEATURE-MAP-016
         self.fill_mode = False  # FEATURE-MAP-017
         self.tileset_list_scroll_y = 0
-        self.tileset_list_scroll_x = 0  # FEATURE-MAP-024
+        self.tileset_list_scroll_x = 0
+        _tl_cfg = self.config_get_section("tilesetList")
+        self.tileset_list_collapsed = bool(_tl_cfg.get("collapsed", False))
+        self._tileset_list_collapse_btn_rect = pygame.Rect(0, 0, 1, 1)  # FEATURE-MAP-024
         self._tileset_list_header_h = 52
         self.tileset_rename_index: int | None = None
         self.tileset_rename_buffer = ""
@@ -966,6 +978,7 @@ class MapEditor:
         self.event_place_modal = EventPlaceModal(self)
         self.event_sprite_modal = EventSpriteModal(self)
         self.event_doc_popout_modal = EventDocPopoutModal(self)
+        self.npc_sprite_editor_modal = NpcSpriteEditorModal(self)
         self._help_back_to: str | None = None
 
         # BUG-MAP-089: restore starred species for the wild-encounter picker.
@@ -1015,6 +1028,7 @@ class MapEditor:
             or self.event_place_modal.open
             or self.event_sprite_modal.open
             or self.event_doc_popout_modal.open
+            or self.npc_sprite_editor_modal.open
         )
 
     # ------------------------------------------------------------------
@@ -1943,15 +1957,14 @@ class MapEditor:
         w, h = self.screen.get_size()
         self.window_w, self.window_h = w, h
         m = LAYOUT_MARGIN
-        footer_h = max(150, min(int(h * 0.24), 280))
-        footer_h = min(footer_h, max(120, h - 100))
-        self.footer_rect = pygame.Rect(0, h - footer_h, w, footer_h)
-        content_bottom = self.footer_rect.y
+        content_bottom = h - m
         available_h = max(60, content_bottom - 2 * m)
+        self.footer_rect = pygame.Rect(0, h, w, 0)
         palette_w = int(max(220, min(w * 0.22, 400)))
         self.palette_rect = pygame.Rect(m, m, palette_w, available_h)
         list_x = self.palette_rect.right + PALETTE_MAP_GAP
-        self.tileset_list_rect = pygame.Rect(list_x, m, TILESET_LIST_W, available_h)
+        list_w = TILESET_LIST_COLLAPSED_W if self.tileset_list_collapsed else TILESET_LIST_W
+        self.tileset_list_rect = pygame.Rect(list_x, m, list_w, available_h)
         map_x = self.tileset_list_rect.right + PALETTE_MAP_GAP
         map_w = max(80, w - map_x - m)
         self.map_viewport_rect = pygame.Rect(map_x, m, map_w, available_h)
@@ -2007,6 +2020,41 @@ class MapEditor:
         self.status_msg_until = time.time() + seconds
         self.status_kind = kind if kind in ("info", "ok", "err") else "info"
 
+    def _draw_map_status_overlay(self) -> None:
+        """IMPROVEMENT-MAP-098: compact toast bar at the bottom of map_viewport_rect."""
+        lines: list[tuple[str, tuple[int, int, int]]] = []
+        if self.edit_mode == "map_id":
+            lines.append((f"Map id (Enter): [{self.text_buffer}]", (255, 220, 120)))
+        elif self.edit_mode == "conn":
+            fi = self.conn_field_index
+            side_i, sub_i = fi // 3, fi % 3
+            side = SIDES[side_i]
+            sub = self.conn_field_names[sub_i]
+            val = self.connections[side][sub if sub != "mapId" else "mapId"]
+            show = self.text_buffer if self.text_buffer else str(val)
+            lines.append((f"{side} {sub}: [{show}]", (255, 255, 160)))
+        if self.status_message and time.time() < self.status_msg_until:
+            st_colors = {"ok": (120, 215, 165), "err": (255, 140, 125), "info": (195, 200, 215)}
+            st_col = st_colors.get(self.status_kind, st_colors["info"])
+            lines.append((self.status_message, st_col))
+        if not lines:
+            return
+        pad = 8
+        lh = self.font_small.get_linesize()
+        bar_h = pad * 2 + lh * len(lines)
+        bar_y = self.map_viewport_rect.bottom - bar_h
+        bar_w = self.map_viewport_rect.w
+        bar_surf = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
+        bar_surf.fill((20, 22, 28, 200))
+        self.screen.blit(bar_surf, (self.map_viewport_rect.x, bar_y))
+        ty = bar_y + pad
+        for txt, col in lines:
+            self.screen.blit(
+                self.font_small.render(txt, True, col),
+                (self.map_viewport_rect.x + pad + 4, ty),
+            )
+            ty += lh
+
     def _clear_undo_stacks(self) -> None:
         self._undo_stack.clear()
         self._redo_stack.clear()
@@ -2015,6 +2063,7 @@ class MapEditor:
         return {
             "tile_layers": copy.deepcopy(self.tile_layers),
             "tile_layer_ids": list(self.tile_layer_ids),
+            "tile_layer_locked": list(self.tile_layer_locked),
             "walk": [row[:] for row in self.walk],
             "trans": [row[:] for row in self.trans],
             "over_player": [row[:] for row in self.over_player],
@@ -2024,6 +2073,11 @@ class MapEditor:
     def _restore_map_state(self, s: dict) -> None:
         self.tile_layers = copy.deepcopy(s["tile_layers"])
         self.tile_layer_ids = list(s["tile_layer_ids"])
+        raw_locked = s.get("tile_layer_locked")
+        if isinstance(raw_locked, list) and len(raw_locked) == len(self.tile_layers):
+            self.tile_layer_locked = [bool(x) for x in raw_locked]
+        else:
+            self.tile_layer_locked = [False] * len(self.tile_layers)
         self.walk = [row[:] for row in s["walk"]]
         self.trans = [row[:] for row in s["trans"]]
         raw_over = s.get("over_player")
@@ -2695,7 +2749,15 @@ class MapEditor:
         w, h = self.map_w, self.map_h
         self.tile_layers = [[[None for _ in range(w)] for _ in range(h)]]
         self.tile_layer_ids = ["ground"]
+        self.tile_layer_locked = [False]
         self.active_layer_index = 0
+
+    def _active_layer_locked(self) -> bool:
+        if not self.tile_layer_locked:
+            return False
+        if self.active_layer_index >= len(self.tile_layer_locked):
+            return False
+        return bool(self.tile_layer_locked[self.active_layer_index])
 
     def _alloc_layers(self) -> None:
         self._alloc_walk_trans()
@@ -2727,6 +2789,7 @@ class MapEditor:
         nw, nh = max(1, min(MAP_SIZE_MAX, nw)), max(1, min(MAP_SIZE_MAX, nh))
         old_tls = self.tile_layers
         old_ids = list(self.tile_layer_ids)
+        old_locked = list(self.tile_layer_locked)
         old_ai = self.active_layer_index
         old_w = self.walk
         old_t = self.trans
@@ -2747,6 +2810,9 @@ class MapEditor:
             self.tile_layer_ids = old_ids[: len(self.tile_layers)]
             while len(self.tile_layer_ids) < len(self.tile_layers):
                 self.tile_layer_ids.append(self._unique_layer_id())
+            self.tile_layer_locked = old_locked[: len(self.tile_layers)]
+            while len(self.tile_layer_locked) < len(self.tile_layers):
+                self.tile_layer_locked.append(False)
             self.active_layer_index = min(max(0, old_ai), len(self.tile_layers) - 1)
         for y in range(min(nh, len(old_w))):
             for x in range(min(nw, len(old_w[y]))):
@@ -2958,6 +3024,7 @@ class MapEditor:
         self._alloc_walk_trans()
         self.tile_layers = []
         self.tile_layer_ids = []
+        self.tile_layer_locked = []
         self.active_layer_index = 0
         tls = layers.get("tileLayers")
         if isinstance(tls, list) and len(tls) > 0:
@@ -2996,6 +3063,7 @@ class MapEditor:
                                 }
                 self.tile_layers.append(grid)
                 self.tile_layer_ids.append(lid)
+                self.tile_layer_locked.append(False)
             if not self.tile_layers:
                 self._reset_tile_layers_single()
             else:
@@ -3344,18 +3412,28 @@ class MapEditor:
             if str(d.get("id", "")) not in in_order_ts
         ]
         if unfiled:
-            rows.append({"row_kind": "section", "name": "Unfiled", "indent_px": 0})
-            for idx in unfiled:
-                tid = str(self.tileset_defs[idx].get("id", ""))
-                rows.append(
-                    {
-                        "row_kind": "tileset",
-                        "def_index": idx,
-                        "id": tid,
-                        "indent_px": 0,
-                        "in_folder": None,
-                    }
-                )
+            unfiled_collapsed = SECTION_UNFILED_ID in collapsed
+            rows.append(
+                {
+                    "row_kind": "section",
+                    "name": "Unfiled",
+                    "indent_px": 0,
+                    "section_id": SECTION_UNFILED_ID,
+                    "collapsed": unfiled_collapsed,
+                }
+            )
+            if not unfiled_collapsed:
+                for idx in unfiled:
+                    tid = str(self.tileset_defs[idx].get("id", ""))
+                    rows.append(
+                        {
+                            "row_kind": "tileset",
+                            "def_index": idx,
+                            "id": tid,
+                            "indent_px": TILESET_LIST_CHILD_INDENT_PX,
+                            "in_folder": None,
+                        }
+                    )
         self._tileset_list_rows_cache_token = token
         self._tileset_list_rows_cache = rows
         return rows
@@ -3476,6 +3554,14 @@ class MapEditor:
         ed["collapsed"] = sorted(s)
         write_tilesets_registry(TILESETS_JSON, self.registry)
 
+    def _set_tileset_list_collapsed(self, collapsed: bool) -> None:
+        """FEATURE-MAP-099: persist left tileset panel collapsed strip."""
+        self.tileset_list_collapsed = collapsed
+        sec = self.config_get_section("tilesetList")
+        sec["collapsed"] = collapsed
+        self.config_set_section("tilesetList", sec)
+        self.relayout()
+
     def _prompt_folder_color(self, folder_id: str) -> None:
         ed = self._editor_folder_blob()
         fm = None
@@ -3524,7 +3610,9 @@ class MapEditor:
         row = rows[ridx]
         rk = row["row_kind"]
         if rk == "section":
-            return ("section", None)
+            sid = str(row.get("section_id") or "")
+            chevron = px < self.tileset_list_rect.x + 24
+            return ("section", (sid, chevron))
         if rk == "folder":
             chevron = px < self.tileset_list_rect.x + 24
             return ("folder", (row["folder_id"], chevron))
@@ -3549,6 +3637,8 @@ class MapEditor:
 
     def _measure_tileset_list_header_height(self) -> int:
         """Must match tileset header block in draw() (including wrapped title width)."""
+        if self.tileset_list_collapsed:
+            return 24
         pad = 6
         list_r = self.tileset_list_rect
         hx = list_r.x + 6
@@ -4047,6 +4137,7 @@ class MapEditor:
         empty = [[None for _ in range(w)] for _ in range(h)]
         self.tile_layers.append(empty)
         self.tile_layer_ids.append("event")
+        self.tile_layer_locked.append(False)
         self.active_layer_index = len(self.tile_layers) - 1
         self.set_status("Added event layer.", kind="ok")
 
@@ -4116,169 +4207,191 @@ class MapEditor:
         ptitle = self.font.render("Preview", True, (220, 220, 220))
         self.screen.blit(ptitle, (self.palette_rect.x + 4, self.palette_rect.y + 4))
         pygame.draw.rect(self.screen, (48, 48, 56), self.tileset_list_rect, 1)
-        hx = self.tileset_list_rect.x + 6
-        hw = max(80, self.tileset_list_rect.w - 12)
-        hy = self.tileset_list_rect.y + 6
-        self.new_folder_btn_rect = pygame.Rect(self.tileset_list_rect.right - 86, hy, 78, 22)
-        pygame.draw.rect(self.screen, (56, 92, 72), self.new_folder_btn_rect)
-        pygame.draw.rect(self.screen, (100, 140, 110), self.new_folder_btn_rect, 1)
-        self.screen.blit(
-            self.font_small.render("+ Folder", True, (235, 245, 235)),
-            (self.new_folder_btn_rect.x + 10, self.new_folder_btn_rect.y + 5),
-        )
-        title_w = max(40, min(hw, self.new_folder_btn_rect.x - hx - 8))
-        hint_w = max(40, self.tileset_list_rect.w - 28)
-        hint_h = 220
-        hy = blit_wrapped_text(
-            self.screen,
-            self.font,
-            "Tilesets",
-            pygame.Rect(hx, hy, title_w, hint_h),
-            (220, 220, 220),
-        )
-        hy += _TILESET_LIST_HINT_GAP_AFTER_TITLE
-        hy = blit_wrapped_text(
-            self.screen,
-            self.font_small,
-            _TILESET_LIST_HINT_1,
-            pygame.Rect(hx, hy, hint_w, hint_h),
-            (145, 145, 160),
-        )
-        hy += 4  # IMPROVEMENT-MAP-016: extra gap before hint 2
-        hy = blit_wrapped_text(
-            self.screen,
-            self.font_small,
-            _TILESET_LIST_HINT_2,
-            pygame.Rect(hx, hy, hint_w, hint_h),
-            (135, 135, 150),
-        )
-        hy += 2
-        blit_wrapped_text(
-            self.screen,
-            self.font_small,
-            _TILESET_LIST_HINT_3,
-            pygame.Rect(hx, hy, hint_w, hint_h),
-            (125, 125, 140),
-        )
-        rh = self._tileset_list_row_h()
-        list_inner = pygame.Rect(
-            self.tileset_list_rect.x + 4,
-            self.tileset_list_rect.y + 4 + self._tileset_list_header_h,
-            self.tileset_list_rect.w - 22,
-            self.tileset_list_rect.h - 8 - self._tileset_list_header_h,
-        )
-        prev_clip = self.screen.get_clip()
-        self.screen.set_clip(list_inner)
-        y0 = list_inner.y
-        lh = self.font_small.get_linesize()
-        rows = self._build_tileset_list_rows()
-        drop_ridx: int | None = None
-        if (self._tileset_drag_moved and self._tileset_drag_def_index is not None) or (
-            self._folder_drag_moved and self._folder_drag_id is not None
-        ):
-            mx, my = pygame.mouse.get_pos()
-            drop_ridx = self._tileset_list_row_index_at_pixel(mx, my)
-        ts_ypad1 = self._tileset_list_y_pad_single_line()
-        hsx = self.tileset_list_scroll_x  # FEATURE-MAP-024: horizontal scroll offset
-        for ridx, row in enumerate(rows):
-            ry = y0 + ridx * rh - self.tileset_list_scroll_y
-            if ry + rh < list_inner.y - 2 or ry > list_inner.bottom + 2:
-                continue
-            row_r = pygame.Rect(list_inner.x, ry, list_inner.w, rh - 2)
-            rk = row["row_kind"]
-            if rk == "section":
-                pygame.draw.rect(self.screen, (48, 46, 56), row_r)
-                sec_b = 2 if drop_ridx == ridx else 1
-                sec_c = (255, 210, 80) if drop_ridx == ridx else (68, 66, 78)
-                pygame.draw.rect(self.screen, sec_c, row_r, sec_b)
-                self.screen.blit(
-                    self.font_small.render(str(row.get("name", "")), True, (160, 165, 185)),
-                    (list_inner.x + 8 - hsx, ry + ts_ypad1),
-                )
-            elif rk == "folder":
-                fc = row["color"]
-                folder_drag_here = (
-                    self._folder_drag_moved
-                    and self._folder_drag_id is not None
-                    and str(row.get("folder_id")) == self._folder_drag_id
-                )
-                base = (fc[0] // 3 + 20, fc[1] // 3 + 20, fc[2] // 3 + 24)
-                if folder_drag_here:
-                    base = (min(255, base[0] + 25), min(255, base[1] + 25), min(255, base[2] + 28))
-                pygame.draw.rect(self.screen, base, row_r)
-                fb = 2 if drop_ridx == ridx or folder_drag_here else 1
-                fcol = (255, 210, 80) if drop_ridx == ridx else (
-                    min(255, fc[0] + 40),
-                    min(255, fc[1] + 40),
-                    min(255, fc[2] + 50),
-                )
-                pygame.draw.rect(self.screen, fcol, row_r, fb)
-                chev = ">" if row["collapsed"] else "v"
-                self.screen.blit(
-                    self.font_small.render(chev, True, (220, 225, 235)),
-                    (list_inner.x + 8 - hsx, ry + ts_ypad1),
-                )
-                fname = str(row.get("name", ""))
-                col = (245, 250, 255)
-                if self.folder_rename_id == row["folder_id"]:
-                    buf = self.folder_rename_buffer or ""
+        if self.tileset_list_collapsed:
+            self.new_folder_btn_rect = pygame.Rect(0, 0, 0, 0)
+            self._tileset_list_collapse_btn_rect = self.tileset_list_rect.copy()
+            strip_cx = self.tileset_list_rect.centerx
+            strip_cy = self.tileset_list_rect.centery
+            self.screen.blit(
+                self.font_small.render(">", True, (200, 205, 220)),
+                (strip_cx - 4, strip_cy - 8),
+            )
+        else:
+            hx = self.tileset_list_rect.x + 6
+            hw = max(80, self.tileset_list_rect.w - 12)
+            hy = self.tileset_list_rect.y + 6
+            self._tileset_list_collapse_btn_rect = pygame.Rect(hx, hy, 20, 22)
+            pygame.draw.rect(self.screen, (44, 48, 56), self._tileset_list_collapse_btn_rect)
+            self.screen.blit(
+                self.font_small.render("<", True, (210, 215, 225)),
+                (hx + 6, hy + 4),
+            )
+            hx += 24
+            self.new_folder_btn_rect = pygame.Rect(self.tileset_list_rect.right - 86, hy, 78, 22)
+            pygame.draw.rect(self.screen, (56, 92, 72), self.new_folder_btn_rect)
+            pygame.draw.rect(self.screen, (100, 140, 110), self.new_folder_btn_rect, 1)
+            self.screen.blit(
+                self.font_small.render("+ Folder", True, (235, 245, 235)),
+                (self.new_folder_btn_rect.x + 10, self.new_folder_btn_rect.y + 5),
+            )
+            title_w = max(40, min(hw, self.new_folder_btn_rect.x - hx - 8))
+            hint_w = max(40, self.tileset_list_rect.w - 28)
+            hint_h = 220
+            hy = blit_wrapped_text(
+                self.screen,
+                self.font,
+                "Tilesets",
+                pygame.Rect(hx, hy, title_w, hint_h),
+                (220, 220, 220),
+            )
+            hy += _TILESET_LIST_HINT_GAP_AFTER_TITLE
+            hy = blit_wrapped_text(
+                self.screen,
+                self.font_small,
+                _TILESET_LIST_HINT_1,
+                pygame.Rect(hx, hy, hint_w, hint_h),
+                (145, 145, 160),
+            )
+            hy += 4  # IMPROVEMENT-MAP-016: extra gap before hint 2
+            hy = blit_wrapped_text(
+                self.screen,
+                self.font_small,
+                _TILESET_LIST_HINT_2,
+                pygame.Rect(hx, hy, hint_w, hint_h),
+                (135, 135, 150),
+            )
+            hy += 2
+            blit_wrapped_text(
+                self.screen,
+                self.font_small,
+                _TILESET_LIST_HINT_3,
+                pygame.Rect(hx, hy, hint_w, hint_h),
+                (125, 125, 140),
+            )
+            rh = self._tileset_list_row_h()
+            list_inner = pygame.Rect(
+                self.tileset_list_rect.x + 4,
+                self.tileset_list_rect.y + 4 + self._tileset_list_header_h,
+                self.tileset_list_rect.w - 22,
+                self.tileset_list_rect.h - 8 - self._tileset_list_header_h,
+            )
+            prev_clip = self.screen.get_clip()
+            self.screen.set_clip(list_inner)
+            y0 = list_inner.y
+            lh = self.font_small.get_linesize()
+            rows = self._build_tileset_list_rows()
+            drop_ridx: int | None = None
+            if (self._tileset_drag_moved and self._tileset_drag_def_index is not None) or (
+                self._folder_drag_moved and self._folder_drag_id is not None
+            ):
+                mx, my = pygame.mouse.get_pos()
+                drop_ridx = self._tileset_list_row_index_at_pixel(mx, my)
+            ts_ypad1 = self._tileset_list_y_pad_single_line()
+            hsx = self.tileset_list_scroll_x  # FEATURE-MAP-024: horizontal scroll offset
+            for ridx, row in enumerate(rows):
+                ry = y0 + ridx * rh - self.tileset_list_scroll_y
+                if ry + rh < list_inner.y - 2 or ry > list_inner.bottom + 2:
+                    continue
+                row_r = pygame.Rect(list_inner.x, ry, list_inner.w, rh - 2)
+                rk = row["row_kind"]
+                if rk == "section":
+                    pygame.draw.rect(self.screen, (48, 46, 56), row_r)
+                    sec_b = 2 if drop_ridx == ridx else 1
+                    sec_c = (255, 210, 80) if drop_ridx == ridx else (68, 66, 78)
+                    pygame.draw.rect(self.screen, sec_c, row_r, sec_b)
+                    sec_chev = ">" if row.get("collapsed") else "v"
                     self.screen.blit(
-                        self.font_small.render(f"[{buf}]", True, col),
+                        self.font_small.render(sec_chev, True, (220, 225, 235)),
+                        (list_inner.x + 8 - hsx, ry + ts_ypad1),
+                    )
+                    self.screen.blit(
+                        self.font_small.render(str(row.get("name", "")), True, (160, 165, 185)),
                         (list_inner.x + 28 - hsx, ry + ts_ypad1),
                     )
-                else:
-                    self.screen.blit(
-                        self.font_small.render(fname, True, col),
-                        (list_inner.x + 28 - hsx, ry + ts_ypad1),
+                elif rk == "folder":
+                    fc = row["color"]
+                    folder_drag_here = (
+                        self._folder_drag_moved
+                        and self._folder_drag_id is not None
+                        and str(row.get("folder_id")) == self._folder_drag_id
                     )
-            else:
-                i = int(row["def_index"])
-                tid = str(row.get("id", "?"))
-                ipx = int(row.get("indent_px", 0))
-                tx = list_inner.x + 8 + ipx - hsx
-                sel = i == self.tileset_index
-                drag_here = self._tileset_drag_moved and self._tileset_drag_def_index == i
-                bg = (68, 72, 90) if drag_here else ((58, 62, 78) if sel else (40, 42, 50))
-                pygame.draw.rect(self.screen, bg, row_r)
-                br_col = (255, 210, 80) if drop_ridx == ridx else ((70, 74, 88) if sel else (52, 54, 62))
-                pygame.draw.rect(self.screen, br_col, row_r, 2 if drop_ridx == ridx else 1)
-                col = (255, 225, 120) if sel else (185, 188, 205)
-                if self.tileset_rename_index == i:
-                    buf = self.tileset_rename_buffer or ""
-                    line = f"[{buf}]"
-                    self.screen.blit(self.font_small.render(line, True, col), (tx, ry + ts_ypad1))
-                else:
-                    lines = self._tileset_id_lines(tid, ipx)
-                    ts_ypn = self._tileset_list_y_pad_multiline(len(lines))
-                    for li, part in enumerate(lines):
+                    base = (fc[0] // 3 + 20, fc[1] // 3 + 20, fc[2] // 3 + 24)
+                    if folder_drag_here:
+                        base = (min(255, base[0] + 25), min(255, base[1] + 25), min(255, base[2] + 28))
+                    pygame.draw.rect(self.screen, base, row_r)
+                    fb = 2 if drop_ridx == ridx or folder_drag_here else 1
+                    fcol = (255, 210, 80) if drop_ridx == ridx else (
+                        min(255, fc[0] + 40),
+                        min(255, fc[1] + 40),
+                        min(255, fc[2] + 50),
+                    )
+                    pygame.draw.rect(self.screen, fcol, row_r, fb)
+                    chev = ">" if row["collapsed"] else "v"
+                    self.screen.blit(
+                        self.font_small.render(chev, True, (220, 225, 235)),
+                        (list_inner.x + 8 - hsx, ry + ts_ypad1),
+                    )
+                    fname = str(row.get("name", ""))
+                    col = (245, 250, 255)
+                    if self.folder_rename_id == row["folder_id"]:
+                        buf = self.folder_rename_buffer or ""
                         self.screen.blit(
-                            self.font_small.render(part, True, col),
-                            (tx, ry + ts_ypn + li * lh),
+                            self.font_small.render(f"[{buf}]", True, col),
+                            (list_inner.x + 28 - hsx, ry + ts_ypad1),
                         )
-        self.screen.set_clip(prev_clip)
-        content_h = max(1, len(rows)) * rh + 8
-        visible_h = list_inner.h
-        max_scroll = max(0, content_h - visible_h)
-        if max_scroll > 0 and list_inner.h > 40:
-            thumb_h = max(28, int(visible_h * visible_h / content_h))
-            t_y = list_inner.y + int(
-                (self.tileset_list_scroll_y / max_scroll) * max(1, visible_h - thumb_h)
-            )
-            sbar = pygame.Rect(list_inner.right + 4, list_inner.y, 5, visible_h)
-            pygame.draw.rect(self.screen, (35, 35, 42), sbar)
-            pygame.draw.rect(self.screen, (95, 98, 115), (sbar.x, t_y, 5, thumb_h))
-        # FEATURE-MAP-024: horizontal scrollbar for tileset list
-        content_w = TILESET_LIST_W + TILESET_LIST_CHILD_INDENT_PX * 4
-        inner_w = list_inner.w
-        max_scroll_x = max(0, content_w - inner_w)
-        if max_scroll_x > 0 and list_inner.w > 40:
-            thumb_w = max(28, int(inner_w * inner_w / content_w))
-            t_x = list_inner.x + int(
-                (self.tileset_list_scroll_x / max_scroll_x) * max(1, inner_w - thumb_w)
-            )
-            hbar = pygame.Rect(list_inner.x, list_inner.bottom + 2, inner_w, 5)
-            pygame.draw.rect(self.screen, (35, 35, 42), hbar)
-            pygame.draw.rect(self.screen, (95, 98, 115), (t_x, hbar.y, thumb_w, 5))
+                    else:
+                        self.screen.blit(
+                            self.font_small.render(fname, True, col),
+                            (list_inner.x + 28 - hsx, ry + ts_ypad1),
+                        )
+                else:
+                    i = int(row["def_index"])
+                    tid = str(row.get("id", "?"))
+                    ipx = int(row.get("indent_px", 0))
+                    tx = list_inner.x + 8 + ipx - hsx
+                    sel = i == self.tileset_index
+                    drag_here = self._tileset_drag_moved and self._tileset_drag_def_index == i
+                    bg = (68, 72, 90) if drag_here else ((58, 62, 78) if sel else (40, 42, 50))
+                    pygame.draw.rect(self.screen, bg, row_r)
+                    br_col = (255, 210, 80) if drop_ridx == ridx else ((70, 74, 88) if sel else (52, 54, 62))
+                    pygame.draw.rect(self.screen, br_col, row_r, 2 if drop_ridx == ridx else 1)
+                    col = (255, 225, 120) if sel else (185, 188, 205)
+                    if self.tileset_rename_index == i:
+                        buf = self.tileset_rename_buffer or ""
+                        line = f"[{buf}]"
+                        self.screen.blit(self.font_small.render(line, True, col), (tx, ry + ts_ypad1))
+                    else:
+                        lines = self._tileset_id_lines(tid, ipx)
+                        ts_ypn = self._tileset_list_y_pad_multiline(len(lines))
+                        for li, part in enumerate(lines):
+                            self.screen.blit(
+                                self.font_small.render(part, True, col),
+                                (tx, ry + ts_ypn + li * lh),
+                            )
+            self.screen.set_clip(prev_clip)
+            content_h = max(1, len(rows)) * rh + 8
+            visible_h = list_inner.h
+            max_scroll = max(0, content_h - visible_h)
+            if max_scroll > 0 and list_inner.h > 40:
+                thumb_h = max(28, int(visible_h * visible_h / content_h))
+                t_y = list_inner.y + int(
+                    (self.tileset_list_scroll_y / max_scroll) * max(1, visible_h - thumb_h)
+                )
+                sbar = pygame.Rect(list_inner.right + 4, list_inner.y, 5, visible_h)
+                pygame.draw.rect(self.screen, (35, 35, 42), sbar)
+                pygame.draw.rect(self.screen, (95, 98, 115), (sbar.x, t_y, 5, thumb_h))
+            # FEATURE-MAP-024: horizontal scrollbar for tileset list
+            content_w = TILESET_LIST_W + TILESET_LIST_CHILD_INDENT_PX * 4
+            inner_w = list_inner.w
+            max_scroll_x = max(0, content_w - inner_w)
+            if max_scroll_x > 0 and list_inner.w > 40:
+                thumb_w = max(28, int(inner_w * inner_w / content_w))
+                t_x = list_inner.x + int(
+                    (self.tileset_list_scroll_x / max_scroll_x) * max(1, inner_w - thumb_w)
+                )
+                hbar = pygame.Rect(list_inner.x, list_inner.bottom + 2, inner_w, 5)
+                pygame.draw.rect(self.screen, (35, 35, 42), hbar)
+                pygame.draw.rect(self.screen, (95, 98, 115), (t_x, hbar.y, thumb_w, 5))
         if self.sheet:
             self._clamp_palette_scroll()
             ox, oy, scale, visible_h = self._palette_thumb_metrics()
@@ -4335,13 +4448,34 @@ class MapEditor:
         chip_bg = (78, 52, 102) if ev_layer else (38, 88, 72)
         pygame.draw.rect(self.screen, chip_bg, self.layer_chip_rect)
         pygame.draw.rect(self.screen, (120, 120, 140), self.layer_chip_rect, 1)
-        chip_txt = (
-            f"EDITING: {ln_chip.upper()}   "
-            f"(layers {self.key_primary('layer_prev')}/{self.key_primary('layer_next')})"
+        lock_w = 30
+        self.layer_chip_lock_btn = pygame.Rect(
+            self.layer_chip_rect.right - lock_w - 6,
+            self.layer_chip_rect.y + 4,
+            lock_w,
+            self.layer_chip_rect.h - 8,
+        )
+        locked = self._active_layer_locked()
+        chip_avail = max(40, self.layer_chip_lock_btn.x - self.layer_chip_rect.x - 12)
+        chip_txt = mtext.truncate_to_width(
+            self.font_small,
+            (
+                f"{self.map_id} \u00b7 {self.map_w}\u00d7{self.map_h} \u00b7 "
+                f"EDITING: {ln_chip.upper()}   "
+                f"(layers {self.key_primary('layer_prev')}/{self.key_primary('layer_next')})"
+            ),
+            chip_avail,
         )
         self.screen.blit(
             self.font_small.render(chip_txt, True, (248, 248, 252)),
             (self.layer_chip_rect.x + 8, self.layer_chip_rect.y + 7),
+        )
+        pygame.draw.rect(self.screen, (55, 60, 72), self.layer_chip_lock_btn)
+        pygame.draw.rect(self.screen, (140, 150, 170), self.layer_chip_lock_btn, 1)
+        lock_txt = "🔒" if locked else "🔓"
+        self.screen.blit(
+            self.font_small.render(lock_txt, True, (240, 240, 248)),
+            (self.layer_chip_lock_btn.x + 6, self.layer_chip_lock_btn.y + 4),
         )
         pygame.draw.rect(self.screen, (90, 90, 110), self.events_btn_rect, 1)
         if (
@@ -4506,109 +4640,8 @@ class MapEditor:
             if self.map_canvas_rect.colliderect(hr):
                 pygame.draw.rect(self.screen, (255, 255, 80), hr, 2)
 
-        pygame.draw.rect(self.screen, (34, 34, 42), self.footer_rect)
-        pygame.draw.line(
-            self.screen,
-            (65, 65, 78),
-            self.footer_rect.topleft,
-            (self.footer_rect.right - 1, self.footer_rect.top),
-            1,
-        )
-        pad = 14
-        inner = pygame.Rect(
-            self.footer_rect.x + pad,
-            self.footer_rect.y + pad,
-            self.footer_rect.w - 2 * pad,
-            self.footer_rect.h - 2 * pad,
-        )
-        yc = inner.y
-        ln = (
-            self.tile_layer_ids[self.active_layer_index]
-            if self.tile_layer_ids and self.active_layer_index < len(self.tile_layer_ids)
-            else "?"
-        )
-        lt = max(1, len(self.tile_layers))
-        li = min(self.active_layer_index + 1, lt)
-        line_a = (
-            f"Map “{self.map_id}”  ·  {self.map_w}×{self.map_h}  ·  "
-            f"Layer {li}/{lt} ({ln})  ·  Mode: {self.edit_mode}  ·  "
-            f"Modes: {self.key_primary('cycle_mode')}  ·  Size: {self.key_primary('set_map_size')}"
-        )
-        yc = blit_wrapped_text(self.screen, self.font, line_a, pygame.Rect(inner.x, yc, inner.w, inner.bottom - yc), (215, 215, 225))
-        yc += 8
-        if self.edit_mode == "walk":
-            self._refresh_overworld_view_player_config()
-            wline = (
-                "Walk mode: hover shows cyan = player sprite footprint, magenta = collision cells checked in-game "
-                f"({self._ov_player_tiles_w}×{self._ov_player_tiles_h} sprite; collision offset "
-                f"{self._ov_collision_off_x},{self._ov_collision_off_y} size {self._ov_collision_w}×{self._ov_collision_h} "
-                f"from src/overworld_view.json). Block grass if the cyan box would overlap unwalkable art while feet stay clear."
-            )
-            yc = blit_wrapped_text(
-                self.screen, self.font_small, wline, pygame.Rect(inner.x, yc, inner.w, inner.bottom - yc), (190, 210, 255)
-            )
-            yc += 6
-        if self.edit_mode == "over_player":
-            oline = "Over-player mode: mark tiles that should render above the player sprite (roofs/canopies)."
-            yc = blit_wrapped_text(
-                self.screen, self.font_small, oline, pygame.Rect(inner.x, yc, inner.w, inner.bottom - yc), (255, 190, 120)
-            )
-            yc += 6
-        if self.show_valid_player_stands:
-            gline = (
-                f"Green boxes: valid player stand anchors (see src/overworld_view.json). "
-                f"Toggle: {self.key_primary('toggle_valid_player_stands')}"
-            )
-            yc = blit_wrapped_text(
-                self.screen, self.font_small, gline, pygame.Rect(inner.x, yc, inner.w, inner.bottom - yc), (120, 255, 160)
-            )
-            yc += 6
-        if self.show_valid_player_stands_orange:
-            oline = (
-                f"Orange boxes: valid 2×2 stand footprints for placement alignment. "
-                f"Toggle: {self.key_primary('toggle_valid_player_stands_orange')}"
-            )
-            yc = blit_wrapped_text(
-                self.screen, self.font_small, oline, pygame.Rect(inner.x, yc, inner.w, inner.bottom - yc), (255, 180, 80)
-            )
-            yc += 6
-        hint_col = (165, 170, 185)
-        hint = (
-            f"Press {self.key_primary('toggle_help')} for the help guide (modes, events, world, keys).  "
-            f"World workspace (#): {self.key_primary('toggle_world_labels')} toggles map name badges."
-        )
-        yc = blit_wrapped_text(
-            self.screen, self.font_small, hint, pygame.Rect(inner.x, yc, inner.w, inner.bottom - yc), hint_col
-        )
-        yc += 10
-        if self.status_message and time.time() < self.status_msg_until:
-            st_colors = {"ok": (120, 215, 165), "err": (255, 140, 125), "info": (195, 200, 215)}
-            st_col = st_colors.get(self.status_kind, st_colors["info"])
-            yc = blit_wrapped_text(
-                self.screen,
-                self.font_small,
-                self.status_message,
-                pygame.Rect(inner.x, yc, inner.w, inner.bottom - yc),
-                st_col,
-            )
-            yc += 8
-        if self.edit_mode == "map_id" and yc < inner.bottom:
-            blit_wrapped_text(
-                self.screen,
-                self.font,
-                f"Map id (Enter): [{self.text_buffer}]",
-                pygame.Rect(inner.x, yc, inner.w, inner.bottom - yc),
-                (255, 220, 120),
-            )
-        elif self.edit_mode == "conn" and yc < inner.bottom:
-            fi = self.conn_field_index
-            side_i, sub_i = fi // 3, fi % 3
-            side = SIDES[side_i]
-            sub = self.conn_field_names[sub_i]
-            val = self.connections[side][sub if sub != "mapId" else "mapId"]
-            show = self.text_buffer if self.text_buffer else str(val)
-            conn_line = f"{side} {sub}: [{show}]"
-            blit_wrapped_text(self.screen, self.font, conn_line, pygame.Rect(inner.x, yc, inner.w, inner.bottom - yc), (255, 255, 160))
+
+        self._draw_map_status_overlay()
 
         if self.size_prompt_active:
             self._draw_size_overlay()
@@ -4637,6 +4670,8 @@ class MapEditor:
             self.events_launcher_modal.draw()
         if self.wild_encounter_modal.open:
             self.wild_encounter_modal.draw()
+        if self.npc_sprite_editor_modal.open:
+            self.npc_sprite_editor_modal.draw()
         if self.audio_engine_modal.open:
             self.audio_engine_modal.draw()
         if self.battle_editor_modal.open:
@@ -4761,6 +4796,22 @@ class MapEditor:
             (self.settings_remove_current_layer_rect.x + 10, self.settings_remove_current_layer_rect.y + 22),
         )
         y += 52
+        self.screen.blit(fs.render("Tile layers", True, (190, 200, 220)), (content.x + 6, y))
+        y += 18
+        self._settings_tile_layer_row_rects = []
+        row_h = lh + 4
+        for li, lid in enumerate(self.tile_layer_ids):
+            row = pygame.Rect(content.x + 6, y, content.w - 12, row_h)
+            lock = pygame.Rect(row.right - 24, row.y + 2, 20, row_h - 4)
+            if li == self.active_layer_index:
+                pygame.draw.rect(self.screen, (42, 58, 48), row)
+            lbl = mtext.truncate_to_width(fs, lid, row.w - 36)
+            lock_on = li < len(self.tile_layer_locked) and self.tile_layer_locked[li]
+            self.screen.blit(fs.render(lbl, True, (220, 225, 235)), (row.x + 8, row.y + 2))
+            self.screen.blit(fs.render("🔒" if lock_on else "🔓", True, (200, 205, 215)), (lock.x + 2, lock.y + 1))
+            self._settings_tile_layer_row_rects.append((li, row, lock))
+            y += row_h + 2
+        y += 8
         self.screen.blit(
             fs.render("Event Engine", True, (190, 200, 220)),
             (content.x + 6, y),
@@ -4813,6 +4864,14 @@ class MapEditor:
                 self.layer_remove_confirm_idx = self.active_layer_index
                 self._close_help_overlay()
             return True
+        for li, row, lock in getattr(self, "_settings_tile_layer_row_rects", []):
+            if lock.collidepoint(mx, my):
+                if li < len(self.tile_layer_locked):
+                    self.tile_layer_locked[li] = not self.tile_layer_locked[li]
+                return True
+            if row.collidepoint(mx, my):
+                self.active_layer_index = li
+                return True
         if self.settings_ee_follow_main_rect.collidepoint(mx, my):
             sec = self.config_get_section("eventEngine")
             sec["selectSwitchesMainMap"] = not bool(sec.get("selectSwitchesMainMap", False))
@@ -5166,6 +5225,9 @@ class MapEditor:
         When brush_origin is set, each painted cell uses the tiled multi-tile brush (not only [0][0]).
         Returns count of cells written to fill (0 if no-op).
         """
+        if self._active_layer_locked():
+            self.set_status("Layer locked.", kind="info")
+            return 0
         g = self._active_grid()
         ref = match_grid if match_grid is not None else g
         if not (0 <= sx < self.map_w and 0 <= sy < self.map_h):
@@ -5270,6 +5332,9 @@ class MapEditor:
             self.set_status("Deleted map; started new empty map", kind="ok")
 
     def apply_brush_at(self, cx: int, cy: int, erase: bool) -> None:
+        if self._active_layer_locked():
+            self.set_status("Layer locked.", kind="info")
+            return
         bh = len(self.brush_pattern)
         bw = len(self.brush_pattern[0]) if bh else 1
         for j in range(bh):
@@ -5285,6 +5350,9 @@ class MapEditor:
                     g[ty][tx] = {"ts": ts, "t": ti}
 
     def fill_rect_with_brush(self, x0: int, y0: int, x1: int, y1: int, erase: bool) -> None:
+        if self._active_layer_locked():
+            self.set_status("Layer locked.", kind="info")
+            return
         ax0, ax1 = sorted((x0, x1))
         ay0, ay1 = sorted((y0, y1))
         g = self._active_grid()
@@ -5582,6 +5650,8 @@ class MapEditor:
             self.events_launcher_modal.close_modal()
         elif back_to == "wild" and self.wild_encounter_modal.open:
             self.wild_encounter_modal.close_modal()
+        elif back_to == "npc" and self.npc_sprite_editor_modal.open:
+            self.npc_sprite_editor_modal.close_modal()
         elif back_to == "audio" and self.audio_engine_modal.open:
             self.audio_engine_modal.close_modal()
         elif back_to == "battle" and self.battle_editor_modal.open:
@@ -5606,6 +5676,8 @@ class MapEditor:
         elif back == "wild":
             if not self.wild_canvas_mode_open:
                 self.wild_encounter_modal.open_modal()
+        elif back == "npc":
+            self.npc_sprite_editor_modal.open_modal()
         elif back == "audio":
             self.audio_engine_modal.open_modal()
         elif back == "battle":
@@ -5690,15 +5762,16 @@ class MapEditor:
                     [
                         ("map_meta", "2  Map and exits", "Map id (I) and edge connections (C)."),
                         ("events", "3  Events", "Event anchors, scripts, and the Events hub."),
-                        ("world", "4  World", "Arrange maps on the world canvas; export with F9."),
+                        ("npc_sprites", "4  NPC Sprites", "Character sprite sheet editor tools."),
+                        ("world", "5  World", "Arrange maps on the world canvas; export with F9."),
                     ],
                 ),
                 (
                     "Reference",
                     [
-                        ("keys", "5  Keybindings", "All configurable shortcuts by category."),
-                        ("script_ops", "6  Script opcodes", "Event script operation reference."),
-                        ("settings", "7  Settings", "Map layers, event layer, key rebinding."),
+                        ("keys", "6  Keybindings", "All configurable shortcuts by category."),
+                        ("script_ops", "7  Script opcodes", "Event script operation reference."),
+                        ("settings", "8  Settings", "Map layers, event layer, key rebinding."),
                     ],
                 ),
             ]
@@ -5760,6 +5833,8 @@ class MapEditor:
                 [
                     f"Layers: {self.key_primary('layer_prev')} / {self.key_primary('layer_next')}, "
                     f"add {self.key_primary('layer_add')}, remove {self.key_primary('layer_remove')}. "
+                    "Lock the active tile layer with the lock icon on the layer chip or in Settings → Tile layers; "
+                    "locked layers cannot be painted, filled, or erased. "
                     f"Tilesets: {self.key_primary('tileset_prev')} / {self.key_primary('tileset_next')}, "
                     f"import {self.key_primary('import_tileset')}, rescale {self.key_primary('rescale_tileset')}. "
                     "Use Settings (gear) or Help → Settings for event layer add/remove.",
@@ -5800,18 +5875,6 @@ class MapEditor:
             )
             return out
 
-        if tab_id == "settings":
-            out.append(("head", "Settings", None))
-            self._help_append_paragraphs(
-                out,
-                wrap_w,
-                [
-                    "Map layer controls and key rebinding live here. Click a key row, then press the new key.",
-                    "S saves key config to tools/map_editor_config.json. R resets defaults. Esc closes help.",
-                ],
-            )
-            return out
-
         if tab_id == "map_meta":
             out.append(("head", "Map id and connections", None))
             self._help_append_paragraphs(
@@ -5838,6 +5901,63 @@ class MapEditor:
                     "Event anchors, scripts, triggers, and sprites are edited in Event Engine — "
                     "not on the main map canvas. Wild patch painting remains on the map when the "
                     "Wild Encounters modal is open. Validate with: python3 tools/validate_map_events.py",
+                    "NPC character sprites: Events hub → NPC Sprites, or see Help → NPC Sprites tab.",
+                ],
+            )
+            return out
+
+        if tab_id == "npc_sprites":
+            out.append(("head", "NPC Sprite Editor", None))
+            self._help_append_paragraphs(
+                out,
+                wrap_w,
+                [
+                    "Open from Events launcher → NPC Sprites. The editor paints 4×4 character walk sheets "
+                    "(default 128×192) exported to src/Graphics/Characters/.",
+                ],
+            )
+            out.append(("head", "Tools (left rail)", None))
+            self._help_append_paragraphs(
+                out,
+                wrap_w,
+                [
+                    "Paint (P): brush — left-drag paints with the current color; right-click erases one pixel.",
+                    "Eraser (E): brush that clears pixels to transparent on drag.",
+                    "Fill (F): click to flood-fill a connected opaque region with the current color.",
+                    "RGBA sliders: set pen color including alpha. Current swatch shows the active color.",
+                ],
+            )
+            out.append(("head", "Layers", None))
+            self._help_append_paragraphs(
+                out,
+                wrap_w,
+                [
+                    "Multiple full-sheet layers composite for preview; Save merges visible layers into one PNG.",
+                    "+ / − add or remove layers. Double-click a layer name to rename. Eye toggles visibility; "
+                    "lock prevents edits on that layer (you can still select a locked layer to view it).",
+                    "Idle→F3, Dup prev, and frame copy operate on the active layer.",
+                ],
+            )
+            out.append(("head", "Canvas and reference", None))
+            self._help_append_paragraphs(
+                out,
+                wrap_w,
+                [
+                    "Direction and frame tabs choose which cell you edit. Edit canvas and reference preview "
+                    "are the same size; wheel on canvas zooms (default 8 px per sprite pixel).",
+                    "Mirror R←L copies the Left direction row to Right after left-side edits.",
+                    "Preset swatches below the canvas; Edit Swatches opens an overlay to add/remove colors "
+                    "(saved to map_editor_config.json).",
+                ],
+            )
+            out.append(("head", "File and shortcuts", None))
+            self._help_append_paragraphs(
+                out,
+                wrap_w,
+                [
+                    "Save / Save As write the composited PNG. New / Load reset or import a sheet into layer 1.",
+                    "W / H fields resize the sheet grid. Ctrl+Z / Ctrl+Y undo and redo layer edits.",
+                    "Help button opens this tab. Back returns to the Events launcher.",
                 ],
             )
             return out
@@ -5853,6 +5973,19 @@ class MapEditor:
                     f"{self.key_primary('toggle_world_labels')} toggles map name badges on nodes.",
                     "Green lines: proximity / adjacency preview. **F9** exports to src/maps/world_layout.json when the cursor is over the canvas.",
                     "Undo/redo apply to world edits when the pointer is over the world canvas.",
+                ],
+            )
+            return out
+
+        if tab_id == "settings":
+            out.append(("head", "Settings", None))
+            self._help_append_paragraphs(
+                out,
+                wrap_w,
+                [
+                    "Map layer controls and key rebinding live here. Click a key row, then press the new key.",
+                    "Tile layer rows: click to select active layer; lock icon toggles edit lock (editor-only).",
+                    "S saves key config to tools/map_editor_config.json. R resets defaults. Esc closes help.",
                 ],
             )
             return out
@@ -6145,6 +6278,9 @@ class MapEditor:
                     if self.wild_encounter_modal.open:
                         self.wild_encounter_modal.handle_wheel(mx, my, int(event.y))
                         continue
+                    if self.npc_sprite_editor_modal.open:
+                        self.npc_sprite_editor_modal.handle_wheel(mx, my, int(event.y))
+                        continue
                     if self.audio_engine_modal.open:
                         self.audio_engine_modal.handle_wheel(mx, my, int(event.y))
                         continue
@@ -6255,6 +6391,8 @@ class MapEditor:
                         self.event_sprite_modal.handle_mouse_motion(mx, my)
                     if self.wild_encounter_modal.open:
                         self.wild_encounter_modal.handle_mouse_motion(mx, my)
+                    if self.npc_sprite_editor_modal.open:
+                        self.npc_sprite_editor_modal.handle_mouse_motion(mx, my)
                     if self.audio_engine_modal.open:
                         self.audio_engine_modal.handle_mouse_motion(mx, my)
                     if self.battle_editor_modal.open:
@@ -6355,6 +6493,9 @@ class MapEditor:
                     if self.wild_encounter_modal.open:
                         if self.wild_encounter_modal.handle_mouse_down(*event.pos, event.button):
                             continue
+                    if self.npc_sprite_editor_modal.open:
+                        if self.npc_sprite_editor_modal.handle_mouse_down(*event.pos, event.button):
+                            continue
                     if self.audio_engine_modal.open:
                         if self.audio_engine_modal.handle_mouse_down(*event.pos, event.button):
                             continue
@@ -6414,6 +6555,12 @@ class MapEditor:
                     if self.map_delete_confirm_stem:
                         self.map_delete_confirm_stem = None
                         continue
+                    if self.layer_chip_lock_btn.collidepoint(event.pos) and event.button == 1:
+                        if self.active_layer_index < len(self.tile_layer_locked):
+                            self.tile_layer_locked[self.active_layer_index] = not self.tile_layer_locked[
+                                self.active_layer_index
+                            ]
+                        continue
                     if self.events_btn_rect.collidepoint(event.pos) and event.button == 1:
                         self._clear_all_list_drags()
                         self._open_events_launcher()
@@ -6461,6 +6608,13 @@ class MapEditor:
                         self._clear_all_list_drags()
                         self.add_tileset_folder()
                         continue
+                    if self.tileset_list_rect.collidepoint(event.pos) and event.button == 1:
+                        if self.tileset_list_collapsed:
+                            self._set_tileset_list_collapsed(False)
+                            continue
+                        if self._tileset_list_collapse_btn_rect.collidepoint(event.pos):
+                            self._set_tileset_list_collapsed(True)
+                            continue
                     if self.tileset_list_rect.collidepoint(event.pos):
                         hit, payload = self._tileset_list_hit(*event.pos)
                         if event.button == 3 and hit == "folder" and payload:
@@ -6468,6 +6622,12 @@ class MapEditor:
                             self._prompt_folder_color(str(fid))
                             continue
                         if event.button != 1:
+                            continue
+                        if hit == "section" and payload:
+                            sid, is_chevron = payload
+                            if is_chevron and sid:
+                                self._clear_all_list_drags()
+                                self._toggle_folder_collapse(str(sid))
                             continue
                         if hit == "folder" and payload:
                             fid, is_chevron = payload
@@ -6615,6 +6775,8 @@ class MapEditor:
                         self.event_sprite_modal.handle_mouse_up(*event.pos, event.button)
                     if self.wild_encounter_modal.open:
                         self.wild_encounter_modal.handle_mouse_up(*event.pos, event.button)
+                    if self.npc_sprite_editor_modal.open:
+                        self.npc_sprite_editor_modal.handle_mouse_up(*event.pos, event.button)
                     if self.audio_engine_modal.open:
                         self.audio_engine_modal.handle_mouse_up(*event.pos, event.button)
                     if self.battle_editor_modal.open:
@@ -6804,6 +6966,9 @@ class MapEditor:
                             continue
                     if self.wild_encounter_modal.open:
                         if self.wild_encounter_modal.handle_keydown(event):
+                            continue
+                    if self.npc_sprite_editor_modal.open:
+                        if self.npc_sprite_editor_modal.handle_key(event):
                             continue
                     if self.audio_engine_modal.open:
                         if self.audio_engine_modal.handle_keydown(event):
@@ -7293,6 +7458,7 @@ class MapEditor:
         lid = self._unique_layer_id()
         self.tile_layers.append(empty)
         self.tile_layer_ids.append(lid)
+        self.tile_layer_locked.append(False)
         self.active_layer_index = len(self.tile_layers) - 1
         self.set_status(f"Added tile layer '{lid}'.", kind="ok")
 
@@ -7304,6 +7470,8 @@ class MapEditor:
             return
         del self.tile_layers[idx]
         del self.tile_layer_ids[idx]
+        if idx < len(self.tile_layer_locked):
+            del self.tile_layer_locked[idx]
         if self.active_layer_index >= len(self.tile_layers):
             self.active_layer_index = len(self.tile_layers) - 1
         elif idx < self.active_layer_index:

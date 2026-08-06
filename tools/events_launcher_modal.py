@@ -1,9 +1,10 @@
-"""FEATURE-MAP-064/087/088: Events Launcher Modal.
+"""FEATURE-MAP-064/087/088/100: Events Launcher Modal.
 
-Presents editor apps in a 2×3 grid:
+Presents editor apps in a 2×2 grid plus NPC Sprites and Help rows:
   Event Engine | Wild Encounters
   Audio Engine | Battle Editor
-  Help (spans row)
+  NPC Sprites (full width)
+  Help (full width)
 
 UI-Standard: min 640×480, BR+BL resize grips, title-bar drag-to-move.
 """
@@ -36,6 +37,7 @@ class EventsLauncherModal:
         self._wild_btn: pygame.Rect = pygame.Rect(0, 0, 1, 1)
         self._audio_btn: pygame.Rect = pygame.Rect(0, 0, 1, 1)
         self._battle_btn: pygame.Rect = pygame.Rect(0, 0, 1, 1)
+        self._npc_btn: pygame.Rect = pygame.Rect(0, 0, 1, 1)
         self._help_btn: pygame.Rect = pygame.Rect(0, 0, 1, 1)
 
     def _clamp_panel(self, panel: pygame.Rect, canvas: pygame.Rect) -> pygame.Rect:
@@ -84,17 +86,18 @@ class EventsLauncherModal:
         )
         body = pygame.Rect(panel.x + 24, panel.y + head_h + 16, panel.w - 48, panel.h - head_h - foot_h - 16)
         gap = 10
-        btn_h = max(44, (body.h - 3 * gap) // 3)
+        btn_h = max(40, (body.h - 3 * gap) // 4)
         col_w = (body.w - gap) // 2
         specs = [
             ("_engine_btn", "Event Engine", (50, 100, 80), body.x, body.y),
             ("_wild_btn", "Wild Encounters", (40, 90, 130), body.x + col_w + gap, body.y),
             ("_audio_btn", "Audio Engine", (70, 90, 60), body.x, body.y + btn_h + gap),
             ("_battle_btn", "Battle Editor", (90, 60, 100), body.x + col_w + gap, body.y + btn_h + gap),
-            ("_help_btn", "Help", (80, 70, 40), body.x, body.y + 2 * (btn_h + gap)),
+            ("_npc_btn", "NPC Sprites", (55, 95, 105), body.x, body.y + 2 * (btn_h + gap)),
+            ("_help_btn", "Help", (80, 70, 40), body.x, body.y + 3 * (btn_h + gap)),
         ]
         for attr, label, color, bx, by in specs:
-            bw = body.w if attr == "_help_btn" else col_w
+            bw = body.w if attr in ("_help_btn", "_npc_btn") else col_w
             btn = pygame.Rect(bx, by, bw, btn_h)
             setattr(self, attr, btn)
             pygame.draw.rect(ed.screen, color, btn)
@@ -154,10 +157,7 @@ class EventsLauncherModal:
                 return True
             if self._wild_btn.collidepoint(mx, my):
                 self.close_modal()
-                if button == 3:
-                    self.ed._open_wild_canvas_mode()
-                else:
-                    self.ed.wild_encounter_modal.open_modal()
+                self.ed.wild_encounter_modal.open_modal()
                 return True
             if self._audio_btn.collidepoint(mx, my):
                 self.close_modal()
@@ -167,9 +167,17 @@ class EventsLauncherModal:
                 self.close_modal()
                 self.ed.battle_editor_modal.open_modal()
                 return True
+            if self._npc_btn.collidepoint(mx, my):
+                self.close_modal()
+                self.ed.npc_sprite_editor_modal.open_modal()
+                return True
             if self._help_btn.collidepoint(mx, my):
                 self.ed._open_help_overlay(tab="home", back_to="launcher")
                 return True
+        if button == 3 and self._wild_btn.collidepoint(mx, my):
+            self.close_modal()
+            self.ed._open_wild_canvas_mode()
+            return True
         if not self.panel_rect.collidepoint(mx, my) and button == 1:
             self.close_modal()
             return True

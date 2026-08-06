@@ -38,12 +38,16 @@ TOOL: tools/map_editor.py
         Contains `MapEditor` class with UI loop, drawing routines, and edit operations (paint/fill/undo/redo/layer ops).
 
         BUG-MAP-096/097/098 + QA audit (2026): wild canvas loads/persists wild data on open/close/Save; session map cache includes wild fields with LRU cap (`SESSION_MAP_CACHE_MAX`); tile blits use scaled-tile LRU cache; map tile loop skipped under blocking modals; palette thumb, tileset list rows, valid-stands coverage grid, sheet cache, and wild overlay surfaces are cached/reused; world node overlap fixup throttled during drag (`WORLD_FIXUP_THROTTLE_MS`). Tests: `tests/test_map_editor_qa_audit.py`.
+        FEATURE-MAP-099/100: collapsible tileset panel + NPC sprite editor modal (`npc_sprite_editor_modal`, launcher NPC Sprites row).
+        FEATURE-MAP-103: `tile_layer_locked` parallel to tile layers; lock icon on layer chip and Settings list blocks paint/fill/eraser (editor-only, not in map JSON).
+        FEATURE-MAP-104: Help tab **NPC Sprites** documents sprite editor; `npcSpriteEditor` config section for palette/defaultZoom.
+        IMPROVEMENT-MAP-098: bottom footer pane removed; vertical space reclaimed for map/palette/tileset list. Map metadata shown in layer chip; transient status messages render as semi-transparent toast bar at the bottom of `map_viewport_rect`; inline prompts (map-id, connection) appear in the same toast overlay.
         REFACTOR-CPP-PY-001: module constant `_CONFIRM_DIALOG_YES_KEYS` (`Return`, `y`) is shared by layer-remove, tileset-delete, and map-delete confirm branches (numpad Enter intentionally not included there; `_ENTER_KEYS` still covers prompts that accept both Return keys).
         FEATURE-MAP-WORLD-001 / BUG-MAP-WORLD-002 / FEATURE-MAP-WORLD-004 / FEATURE-MAP-WORLD-008: toolbar `#` toggles world workspace over the map canvas (thumbnails, pan/zoom, context menu, separate world undo/redo when the cursor is over the canvas). **World units are map tiles:** `widthPx`/`heightPx` on each node equal `mapWidthTiles`/`mapHeightTiles`; `world_cam_zoom` is pixels per world tile (default `8`). Legacy layouts where extents were `8 × tileCount` migrate on load (`WORLD_LEGACY_WORLD_PX_PER_TILE`); camera `x`/`y`/`zoom` rescale accordingly. Node origins snap to integer tile coords (`round` to nearest tile; BUG-MAP-WORLD-009) after add, paste, and drag release. Overlap fixup pushes by exactly the overlap amount (`eps=0`, BUG-MAP-WORLD-009) so adjacent (touching, sep=0) placement is allowed. Proximity **preview** lines include `sep == 0` (touching maps show a green connection); export graph also includes `sep == 0` via `build_proximity_edges`. `WORLD_PX_PER_MAP_TILE` applies only to thumbnail rasterization inside the palette-style thumb builder, not to world node size. Large-map thumbnails clamp per-tile draw size (`WORLD_THUMB_CELL_PX_MIN`) and omit dense cell grids when tiles would be sub-5 px. RMB menu toggles `interior` (overlap allowed); non-interior nodes are pushed to non-overlapping (touching allowed) while dragging. Proximity links (green) draw when AABB separation is within `WORLD_EDGE_SNAP_TILES` (including sep=0) (tile units; export `edgeSnapPx` uses the same). FEATURE-MAP-030: editor **3.0**; toolbar **E** opens popover (**NPC Events** | **Wild Encounters**). NPC Events: 2×2 anchors, scripts under `src/maps/scripts/`, sprites from `src/Graphics/Characters`, Pokemon Icons, Icons shiny. FEATURE-MAP-050 wild mode: `layers.wildEncounter` + `wildPatches[]` sidebar. Snapshot `tools/backup_map_editor_v3/`. Opcodes: `docs/event_script_ops.md`. Validate: `python3 tools/validate_map_events.py`. Version shown in pygame title. `src/maps/world_layout.json` is excluded from the open-map list, `maps_index.json`, and `refresh_map_file_list`.
         FEATURE-MAP-041 / FEATURE-MAP-085 / IMPROVEMENT-MAP-094: **Help** toolbar button and **H** (`toggle_help`) open the modal help guide on a context-appropriate tab (`_help_default_tab_for_context`: Event Engine open → **Script Ops**; events/wild workspace or launcher → **Events**; otherwise **Contents**). **Settings** (gear) opens help directly on the **Settings** tab (layer add/remove, key rebinding; legacy `settings_open` overlay removed). Tabs: Contents, **Editing modes** (merged paint/walk/transparent/over-player), Map & exits, Events, World, Keys, Script Ops, Settings. Contents uses grouped TOC headings; number keys **1–7** jump to topics. Global **search** box below the tab bar filters all help body text; click a result to jump. Scroll with mouse wheel; Esc closes (clears search when the search box is focused).
-        BUG-MAP-WORLD-007: world mode does not draw a fixed footer-hint string on the map canvas (panning no longer scrolls art under a static overlay); world shortcuts are documented in the help guide (**H**) and the footer hint line.
-        IMPROVEMENT-MAP-036: in **walk** edit mode, hovering the map draws a semi-transparent cyan rectangle for the player **visual** footprint (`playerTilesW` / `playerTilesH`) and magenta outlines on the **collision** cells (`playerCollisionOffX` / `playerCollisionOffY` / `playerCollisionW` / `playerCollisionH`), loaded from `src/overworld_view.json` (same clamp rules as the game). The footer adds a short explanation: buffer tiles are needed when the cyan sprite box would overlap solid art while only the magenta cells are blocked for movement. Config is re-read when the JSON file modification time changes.
-        IMPROVEMENT-MAP-037: **`toggle_valid_player_stands`** (default **`j`**) toggles a bright green rectangular outline around every **valid player anchor** on the map canvas (not in world `#` workspace): anchors where all collision sub-cells are in-bounds and walkable (`walk` layer `0`), using the same `overworld_view.json` footprint and collision fields as IMPROVEMENT-MAP-036. Each outline spans `playerTilesW` × `playerTilesH` cells on the existing 1×1 grid. Footer shows status when the overlay is on; expanded help lists the shortcut.
+        BUG-MAP-WORLD-007: world mode does not draw a fixed footer-hint string on the map canvas (panning no longer scrolls art under a static overlay); world shortcuts are documented in the help guide (**H**).
+        IMPROVEMENT-MAP-036: in **walk** edit mode, hovering the map draws a semi-transparent cyan rectangle for the player **visual** footprint (`playerTilesW` / `playerTilesH`) and magenta outlines on the **collision** cells (`playerCollisionOffX` / `playerCollisionOffY` / `playerCollisionW` / `playerCollisionH`), loaded from `src/overworld_view.json` (same clamp rules as the game). Config is re-read when the JSON file modification time changes.
+        IMPROVEMENT-MAP-037: **`toggle_valid_player_stands`** (default **`j`**) toggles a bright green rectangular outline around every **valid player anchor** on the map canvas (not in world `#` workspace): anchors where all collision sub-cells are in-bounds and walkable (`walk` layer `0`), using the same `overworld_view.json` footprint and collision fields as IMPROVEMENT-MAP-036. Each outline spans `playerTilesW` × `playerTilesH` cells on the existing 1×1 grid. Help lists the shortcut.
         IMPROVEMENT-MAP-038: **Performance:** valid-stand overlay uses a **cached anchor list** rebuilt only when walkability, map dimensions, overworld collision footprint, or overlay toggle changes (not every frame). **Walk**, **transparent**, and **over_player** tint layers reuse preallocated per-cell SRCALPHA surfaces instead of allocating per visible tile per frame. Walk-mode **hover footprint** reuses one surface sized to `(playerTilesW*cell_px, playerTilesH*cell_px)`. `overworld_view.json` is stat/parsed at most **once per draw frame** for consumers that call `_refresh_overworld_view_player_config`. Event character subsurface previews use an **LRU-capped** `OrderedDict` (`CHAR_FRAME_SURFACE_CACHE_MAX`, default 64).
         IMPROVEMENT-MAP-039: **`toggle_valid_player_stands_orange`** (default **`k`**) toggles bright orange valid-footprint outlines using the same cached anchor geometry as the green overlay; this gives a dedicated placement-alignment overlay while preserving the original J toggle.
         IMPROVEMENT-MAP-040: Adds editor mode **`over_player`** (cycled via Tab) with orange per-cell tint editing and JSON persistence as `layers.overPlayer` (binary grid). Runtime rendering uses base pass (all non-overPlayer tiles), then player, then over-player pass (tiles where `overPlayer[y][x] != 0`) in both single-map and world-layout views.
@@ -235,7 +239,78 @@ TOOL: tools/wild_encounter_modal.py
         that mutate wild data while a different-map scope is active — apply_species, _commit_edit
         (step/weight), handle_mouse_up (after paint_cells), add/remove row buttons (local and
         global), and patch-panel delegate (ed._wild_handle_panel_click). This ensures
-        `wild_modal_switch_map` and `wild_modal_end` correctly flush the buffered session.
+        `        wild_modal_switch_map` and `wild_modal_end` correctly flush the buffered session.
+
+        FEATURE-MAP-099: left tileset list panel collapses to `TILESET_LIST_COLLAPSED_W` (28px) via
+        header chevron; persisted in `map_editor_config.json` → `tilesetList.collapsed`. Unfiled
+        section uses `section:unfiled` in `editorTilesetFolders.collapsed`; child tilesets indent
+        `TILESET_LIST_CHILD_INDENT_PX` (20).
+
+TOOL: tools/npc_sprite_sheet_helpers.py
+
+    PURPOSE:
+        FEATURE-MAP-100: pure helpers for 4×4 NPC character sheet layout, frame indexing,
+        horizontal mirror, and PNG filename sanitization.
+
+    USAGE:
+        Imported by `tools/npc_sprite_editor_modal.py` and unit tests.
+
+    INPUT:
+        Sheet dimensions, direction names, RGBA pixel grids, Characters directory path.
+
+    OUTPUT:
+        Validated dimensions, frame indices, mirrored grids, sorted PNG basenames.
+
+    DEPENDENCIES:
+        Python 3 standard library (pathlib only).
+
+    SIDE EFFECTS:
+        None (pure functions except list_character_pngs reads directory).
+
+    ERROR HANDLING:
+        validate_sheet_dimensions returns (False, message) for non-divisible sizes.
+
+    NOTES:
+        Default sheet 128×192 (32×48 cells). FEATURE-MAP-102: `flood_fill_surface`,
+        `composite_rgba_layers`, `parse_palette_from_config`, `DEFAULT_NPC_PALETTE`.
+        Tests: `tests/test_npc_sprite_sheet_helpers.py`.
+
+TOOL: tools/npc_sprite_editor_modal.py
+
+    PURPOSE:
+        FEATURE-MAP-100: pygame modal to paint NPC walk sprites on a 4×4 sheet grid and export
+        PNGs to `src/Graphics/Characters/` for EventSpriteModal.
+
+    USAGE:
+        Opened from Events launcher → NPC Sprites. Back returns to launcher.
+
+    INPUT:
+        Mouse (paint/erase, direction/frame tabs, palette), keyboard (Save As filename, Ctrl+Z/Y,
+        dimension fields), wheel (zoom on canvas).
+
+    OUTPUT:
+        PNG files under Characters/; on-screen preview with optional reference sheet pane.
+
+    DEPENDENCIES:
+            - pygame
+            - tools/npc_sprite_sheet_helpers.py
+            - tools/modal_text.py
+            - tools/map_editor.py (MapEditor)
+
+    SIDE EFFECTS:
+        Writes PNG to disk on Save / Save As.
+
+    ERROR HANDLING:
+        Status messages for invalid dimensions, missing files, save failures.
+
+    NOTES:
+        BUG-MAP-101: canvas aspect-correct; per-axis _cell_step_x/y hit-test.
+        FEATURE-MAP-102: left rail (P/E/F tools, RGBA sliders, layers with eye/lock/rename),
+        composite visible layers on save, flood fill, zoom default 8, matched ref canvas.
+        FEATURE-MAP-104: Help button → npc_sprites tab; Edit Swatches → config palette.
+        Mirror-lock (default on) copies Left row to mirrored Right row on active layer.
+        Walk helpers: Idle→F3, Dup prev. Non-128×192 warns via sheet_dimensions_warning.
+        Tests: `tests/test_npc_sprite_editor_modal.py`, `tests/test_npc_sprite_sheet_helpers.py`.
 
 TOOL: tools/validate_map_events.py
 
@@ -289,14 +364,14 @@ TOOL: tools/event_script_schema.py
         `trigger_from_legacy_interaction()`, `normalize_map_event(ev)`, `migrate_script_document(doc, map_id)`,
         and `script_documents_equal(a, b)` for `tools/migrate_map_events.py`.
 
-TOOL: tools/sync_cursor_plans.py
+TOOL: docs/cursor_helper_scripts/sync_cursor_plans.py
 
     PURPOSE:
         IMPROVEMENT-MAP-096: copy Cursor plan files from the global plans directory into the
         repo-backed `.cursor/plans/` folder so they can be committed to `origin/development`.
 
     USAGE:
-        `python3 tools/sync_cursor_plans.py`
+        `python3 docs/cursor_helper_scripts/sync_cursor_plans.py`
         Run before every git push (enforced by Git-Push-Development-Rule).
 
     INPUT:
@@ -317,15 +392,15 @@ TOOL: tools/sync_cursor_plans.py
     NOTES:
         Repo-only plans not present in the global folder are preserved. See `.cursor/plans/README.md`.
 
-TOOL: tools/sync_cursor_skills.py
+TOOL: docs/cursor_helper_scripts/sync_cursor_skills.py
 
     PURPOSE:
         IMPROVEMENT-MAP-097: copy Cursor skill folders from `~/.cursor/skills/` into
         `.cursor/skills/` for git backup on `origin/development`.
 
     USAGE:
-        `python3 tools/sync_cursor_skills.py`
-        Prefer `python3 tools/sync_cursor_backup.py` (plans + skills together).
+        `python3 docs/cursor_helper_scripts/sync_cursor_skills.py`
+        Prefer `python3 docs/cursor_helper_scripts/sync_cursor_backup.py` (plans + skills together).
 
     INPUT:
         Source: `~/.cursor/skills/<skill-name>/` (typically contains `SKILL.md`).
@@ -345,22 +420,24 @@ TOOL: tools/sync_cursor_skills.py
     NOTES:
         Does not sync `~/.cursor/skills-cursor/` (Cursor built-in skills).
 
-TOOL: tools/sync_cursor_backup.py
+TOOL: docs/cursor_helper_scripts/sync_cursor_backup.py
 
     PURPOSE:
         IMPROVEMENT-MAP-097: run plan and skill sync in one step before git push.
 
     USAGE:
-        `python3 tools/sync_cursor_backup.py`
+        `python3 docs/cursor_helper_scripts/sync_cursor_backup.py`
 
     INPUT:
-        Invokes `tools/sync_cursor_plans.py` and `tools/sync_cursor_skills.py`.
+        Invokes `docs/cursor_helper_scripts/sync_cursor_plans.py` and
+        `docs/cursor_helper_scripts/sync_cursor_skills.py`.
 
     OUTPUT:
         Combined exit code; stdout from each child script.
 
     DEPENDENCIES:
-        `tools/sync_cursor_plans.py`, `tools/sync_cursor_skills.py`.
+        `docs/cursor_helper_scripts/sync_cursor_plans.py`,
+        `docs/cursor_helper_scripts/sync_cursor_skills.py`.
 
     SIDE EFFECTS:
         Updates `.cursor/plans/` and `.cursor/skills/` in the working tree.
@@ -775,14 +852,15 @@ TOOL: tools/sync_pokemon_from_graphics.py
 TOOL: tools/events_launcher_modal.py
 
     PURPOSE:
-        EventsLauncherModal — UI-Standard launcher modal (FEATURE-MAP-064). Opened by the E
-        toolbar button (LMB) or V key (`open_events_launcher`). Presents a 2×3 grid: Event Engine |
-        Wild Encounters · Audio Engine | Battle Editor · Help (full width).
+        EventsLauncherModal — UI-Standard launcher modal (FEATURE-MAP-064/100). Opened by the E
+        toolbar button (LMB) or V key (`open_events_launcher`). Presents Event Engine |
+        Wild Encounters · Audio Engine | Battle Editor · NPC Sprites (full width) · Help (full width).
 
     USAGE:
         Instantiated in MapEditor.__init__. Opened via events_btn_rect LMB or V key.
         Calls ed.event_engine_modal.open_modal(), ed.wild_encounter_modal.open_modal(),
-        ed.audio_engine_modal.open_modal(), ed.battle_editor_modal.open_modal(), or
+        ed.audio_engine_modal.open_modal(), ed.battle_editor_modal.open_modal(),
+        ed.npc_sprite_editor_modal.open_modal(), or
         ed._open_help_overlay(tab="home", back_to="launcher") on button press.
 
     INPUT:
@@ -798,6 +876,7 @@ TOOL: tools/events_launcher_modal.py
             - tools/wild_encounter_modal.py (WildEncounterModal)
             - tools/audio_engine_modal.py (AudioEngineModal)
             - tools/battle_editor_modal.py (BattleEditorModal)
+            - tools/npc_sprite_editor_modal.py (NpcSpriteEditorModal)
 
     SIDE EFFECTS:
         Opens or closes peer modals; updates _panel_override (session-persisted).
@@ -1291,3 +1370,32 @@ TOOL: tests/test_phase8_verify.py
     NOTES:
         Requires dummy SDL driver for CI/headless environments. Full interactive mouse/keyboard
         matrix still optional for human QA; this phase automates layout and handler contracts.
+
+TOOL: docs/cursor_helper_scripts/generate_github_guide_pdf.py
+
+    PURPOSE:
+        Build the printable Git/GitHub workflow and fresh-environment setup guide PDF for this
+        repository (`docs/github-and-setup-guide.pdf`).
+
+    USAGE:
+        python3 docs/cursor_helper_scripts/generate_github_guide_pdf.py
+
+    INPUT:
+        Embedded guide content in the script (branch model, glossary, clone/build/test steps,
+        commit/pull/push/merge/reset commands).
+
+    OUTPUT:
+        `docs/github-and-setup-guide.pdf` (multi-page reference document).
+
+    DEPENDENCIES:
+        Python 3, fpdf2 (`python3 -m pip install --user fpdf2`).
+
+    SIDE EFFECTS:
+        Overwrites `docs/github-and-setup-guide.pdf` when run.
+
+    ERROR HANDLING:
+        Exits with traceback if fpdf2 is missing or PDF write fails.
+
+    NOTES:
+        Regenerate after changing project branch policy or setup steps. Uses ASCII-only text for
+        Helvetica/Courier core fonts.
