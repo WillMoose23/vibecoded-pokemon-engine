@@ -1951,11 +1951,9 @@ class MapEditor:
         w, h = self.screen.get_size()
         self.window_w, self.window_h = w, h
         m = LAYOUT_MARGIN
-        footer_h = max(150, min(int(h * 0.24), 280))
-        footer_h = min(footer_h, max(120, h - 100))
-        self.footer_rect = pygame.Rect(0, h - footer_h, w, footer_h)
-        content_bottom = self.footer_rect.y
+        content_bottom = h - m
         available_h = max(60, content_bottom - 2 * m)
+        self.footer_rect = pygame.Rect(0, h, w, 0)
         palette_w = int(max(220, min(w * 0.22, 400)))
         self.palette_rect = pygame.Rect(m, m, palette_w, available_h)
         list_x = self.palette_rect.right + PALETTE_MAP_GAP
@@ -2015,6 +2013,41 @@ class MapEditor:
         self.status_message = msg
         self.status_msg_until = time.time() + seconds
         self.status_kind = kind if kind in ("info", "ok", "err") else "info"
+
+    def _draw_map_status_overlay(self) -> None:
+        """IMPROVEMENT-MAP-098: compact toast bar at the bottom of map_viewport_rect."""
+        lines: list[tuple[str, tuple[int, int, int]]] = []
+        if self.edit_mode == "map_id":
+            lines.append((f"Map id (Enter): [{self.text_buffer}]", (255, 220, 120)))
+        elif self.edit_mode == "conn":
+            fi = self.conn_field_index
+            side_i, sub_i = fi // 3, fi % 3
+            side = SIDES[side_i]
+            sub = self.conn_field_names[sub_i]
+            val = self.connections[side][sub if sub != "mapId" else "mapId"]
+            show = self.text_buffer if self.text_buffer else str(val)
+            lines.append((f"{side} {sub}: [{show}]", (255, 255, 160)))
+        if self.status_message and time.time() < self.status_msg_until:
+            st_colors = {"ok": (120, 215, 165), "err": (255, 140, 125), "info": (195, 200, 215)}
+            st_col = st_colors.get(self.status_kind, st_colors["info"])
+            lines.append((self.status_message, st_col))
+        if not lines:
+            return
+        pad = 8
+        lh = self.font_small.get_linesize()
+        bar_h = pad * 2 + lh * len(lines)
+        bar_y = self.map_viewport_rect.bottom - bar_h
+        bar_w = self.map_viewport_rect.w
+        bar_surf = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
+        bar_surf.fill((20, 22, 28, 200))
+        self.screen.blit(bar_surf, (self.map_viewport_rect.x, bar_y))
+        ty = bar_y + pad
+        for txt, col in lines:
+            self.screen.blit(
+                self.font_small.render(txt, True, col),
+                (self.map_viewport_rect.x + pad + 4, ty),
+            )
+            ty += lh
 
     def _clear_undo_stacks(self) -> None:
         self._undo_stack.clear()
@@ -4389,6 +4422,7 @@ class MapEditor:
         pygame.draw.rect(self.screen, chip_bg, self.layer_chip_rect)
         pygame.draw.rect(self.screen, (120, 120, 140), self.layer_chip_rect, 1)
         chip_txt = (
+            f"{self.map_id} \u00b7 {self.map_w}\u00d7{self.map_h} \u00b7 "
             f"EDITING: {ln_chip.upper()}   "
             f"(layers {self.key_primary('layer_prev')}/{self.key_primary('layer_next')})"
         )
@@ -4559,109 +4593,8 @@ class MapEditor:
             if self.map_canvas_rect.colliderect(hr):
                 pygame.draw.rect(self.screen, (255, 255, 80), hr, 2)
 
-        pygame.draw.rect(self.screen, (34, 34, 42), self.footer_rect)
-        pygame.draw.line(
-            self.screen,
-            (65, 65, 78),
-            self.footer_rect.topleft,
-            (self.footer_rect.right - 1, self.footer_rect.top),
-            1,
-        )
-        pad = 14
-        inner = pygame.Rect(
-            self.footer_rect.x + pad,
-            self.footer_rect.y + pad,
-            self.footer_rect.w - 2 * pad,
-            self.footer_rect.h - 2 * pad,
-        )
-        yc = inner.y
-        ln = (
-            self.tile_layer_ids[self.active_layer_index]
-            if self.tile_layer_ids and self.active_layer_index < len(self.tile_layer_ids)
-            else "?"
-        )
-        lt = max(1, len(self.tile_layers))
-        li = min(self.active_layer_index + 1, lt)
-        line_a = (
-            f"Map “{self.map_id}”  ·  {self.map_w}×{self.map_h}  ·  "
-            f"Layer {li}/{lt} ({ln})  ·  Mode: {self.edit_mode}  ·  "
-            f"Modes: {self.key_primary('cycle_mode')}  ·  Size: {self.key_primary('set_map_size')}"
-        )
-        yc = blit_wrapped_text(self.screen, self.font, line_a, pygame.Rect(inner.x, yc, inner.w, inner.bottom - yc), (215, 215, 225))
-        yc += 8
-        if self.edit_mode == "walk":
-            self._refresh_overworld_view_player_config()
-            wline = (
-                "Walk mode: hover shows cyan = player sprite footprint, magenta = collision cells checked in-game "
-                f"({self._ov_player_tiles_w}×{self._ov_player_tiles_h} sprite; collision offset "
-                f"{self._ov_collision_off_x},{self._ov_collision_off_y} size {self._ov_collision_w}×{self._ov_collision_h} "
-                f"from src/overworld_view.json). Block grass if the cyan box would overlap unwalkable art while feet stay clear."
-            )
-            yc = blit_wrapped_text(
-                self.screen, self.font_small, wline, pygame.Rect(inner.x, yc, inner.w, inner.bottom - yc), (190, 210, 255)
-            )
-            yc += 6
-        if self.edit_mode == "over_player":
-            oline = "Over-player mode: mark tiles that should render above the player sprite (roofs/canopies)."
-            yc = blit_wrapped_text(
-                self.screen, self.font_small, oline, pygame.Rect(inner.x, yc, inner.w, inner.bottom - yc), (255, 190, 120)
-            )
-            yc += 6
-        if self.show_valid_player_stands:
-            gline = (
-                f"Green boxes: valid player stand anchors (see src/overworld_view.json). "
-                f"Toggle: {self.key_primary('toggle_valid_player_stands')}"
-            )
-            yc = blit_wrapped_text(
-                self.screen, self.font_small, gline, pygame.Rect(inner.x, yc, inner.w, inner.bottom - yc), (120, 255, 160)
-            )
-            yc += 6
-        if self.show_valid_player_stands_orange:
-            oline = (
-                f"Orange boxes: valid 2×2 stand footprints for placement alignment. "
-                f"Toggle: {self.key_primary('toggle_valid_player_stands_orange')}"
-            )
-            yc = blit_wrapped_text(
-                self.screen, self.font_small, oline, pygame.Rect(inner.x, yc, inner.w, inner.bottom - yc), (255, 180, 80)
-            )
-            yc += 6
-        hint_col = (165, 170, 185)
-        hint = (
-            f"Press {self.key_primary('toggle_help')} for the help guide (modes, events, world, keys).  "
-            f"World workspace (#): {self.key_primary('toggle_world_labels')} toggles map name badges."
-        )
-        yc = blit_wrapped_text(
-            self.screen, self.font_small, hint, pygame.Rect(inner.x, yc, inner.w, inner.bottom - yc), hint_col
-        )
-        yc += 10
-        if self.status_message and time.time() < self.status_msg_until:
-            st_colors = {"ok": (120, 215, 165), "err": (255, 140, 125), "info": (195, 200, 215)}
-            st_col = st_colors.get(self.status_kind, st_colors["info"])
-            yc = blit_wrapped_text(
-                self.screen,
-                self.font_small,
-                self.status_message,
-                pygame.Rect(inner.x, yc, inner.w, inner.bottom - yc),
-                st_col,
-            )
-            yc += 8
-        if self.edit_mode == "map_id" and yc < inner.bottom:
-            blit_wrapped_text(
-                self.screen,
-                self.font,
-                f"Map id (Enter): [{self.text_buffer}]",
-                pygame.Rect(inner.x, yc, inner.w, inner.bottom - yc),
-                (255, 220, 120),
-            )
-        elif self.edit_mode == "conn" and yc < inner.bottom:
-            fi = self.conn_field_index
-            side_i, sub_i = fi // 3, fi % 3
-            side = SIDES[side_i]
-            sub = self.conn_field_names[sub_i]
-            val = self.connections[side][sub if sub != "mapId" else "mapId"]
-            show = self.text_buffer if self.text_buffer else str(val)
-            conn_line = f"{side} {sub}: [{show}]"
-            blit_wrapped_text(self.screen, self.font, conn_line, pygame.Rect(inner.x, yc, inner.w, inner.bottom - yc), (255, 255, 160))
+
+        self._draw_map_status_overlay()
 
         if self.size_prompt_active:
             self._draw_size_overlay()

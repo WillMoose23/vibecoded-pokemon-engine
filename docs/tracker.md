@@ -1,5 +1,34 @@
 # Issue tracker
 
+## IMPROVEMENT-MAP-098
+
+```
+ID: IMPROVEMENT-MAP-098
+TYPE: IMPROVEMENT
+TITLE: Remove bottom footer pane — reclaim vertical space for map/palette
+
+DESCRIPTION:
+The reserved bottom footer strip (24% of window height) is removed. Map metadata
+now appears in the layer chip; transient status messages appear as a toast overlay
+on the map viewport. Mode hint text (walk, over-player, valid-stand) is removed
+from the footer since it duplicates the H help guide and the map canvas overlays.
+
+EXPECTED_BEHAVIOR:
+- No bottom pane visible; palette, tileset list, and map viewport extend to the
+  window bottom margin.
+- set_status() messages render as a semi-transparent bar at the bottom of the map
+  viewport area (auto-expires as before).
+- Inline map-id / connection prompts appear in the same toast overlay.
+- Map id and dimensions shown in the layer chip.
+
+SCOPE:
+tools/map_editor.py (relayout, draw, _draw_map_status_overlay)
+
+PRIORITY: LOW
+STATUS: DONE
+ASSIGNED_TO: Cursor
+```
+
 ## FEATURE-MAP-099
 
 ```
