@@ -15,7 +15,7 @@ def _load_cpp_ops_ordered() -> tuple[str, ...]:
     gen = _TOOLS_DIR / "event_script_ops_generated.py"
     if not gen.is_file():
         print(
-            f"event_script_schema: missing {gen.name}; run: python3 tools/extract_map_script_ops.py",
+            f"event_script_schema: missing {gen.name}; run: python3 docs/cursor_helper_scripts/extract_map_script_ops.py",
             file=sys.stderr,
         )
         raise FileNotFoundError(gen)

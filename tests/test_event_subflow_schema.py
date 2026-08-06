@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 TOOLS = ROOT / "tools"
+CURSOR_SCRIPTS = ROOT / "docs" / "cursor_helper_scripts"
 if str(TOOLS) not in sys.path:
     sys.path.insert(0, str(TOOLS))
 
@@ -21,7 +22,7 @@ def _load(name: str, path: Path):
 
 
 ess = _load("event_script_schema", TOOLS / "event_script_schema.py")
-vme = _load("validate_map_events", TOOLS / "validate_map_events.py")
+vme = _load("validate_map_events", CURSOR_SCRIPTS / "validate_map_events.py")
 
 
 class TestSubflowSchema(unittest.TestCase):

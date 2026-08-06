@@ -19,6 +19,7 @@ from npc_sprite_sheet_helpers import (
     composite_rgba_layers,
     flood_fill_surface,
     list_character_pngs,
+    normalize_pixel_rect,
     parse_palette_from_config,
     sanitize_character_filename,
     sheet_dimensions_warning,
@@ -32,12 +33,20 @@ _MODAL_MIN_W = 840
 _MODAL_MIN_H = 520
 _ZOOM_MIN = 4
 _ZOOM_MAX = 32
-_DEFAULT_ZOOM = 8
+_DEFAULT_ZOOM = 12
 _RAIL_W = 130
 _LAYER_ROW_H = 22
 _DBL_CLICK_SEC = 0.4
+# FEATURE-MAP-108: collapsible left-side sprite search panel (reference picker).
+_SPRITE_PANEL_COLLAPSED_W = 22
+_SPRITE_PANEL_EXPANDED_W = 150
+_SPRITE_ROW_H = 20
+# FEATURE-MAP-107: reference label moved under the picture, in yellow; space reserved
+# in the footer calc so it never collides with the palette row.
+_REF_LABEL_COLOR = (255, 225, 90)
+_REF_LABEL_H = 18
 
-ToolId = Literal["paint", "eraser", "fill"]
+ToolId = Literal["paint", "eraser", "fill", "select"]
 
 
 class NpcSpriteEditorModal:
@@ -93,6 +102,23 @@ class NpcSpriteEditorModal:
         self._swatch_edit_working: list[tuple[int, int, int, int]] = []
         self._rgba_drag_channel: str | None = None
 
+        # FEATURE-MAP-108: collapsible sprite search panel (reference picker).
+        self._sprite_panel_collapsed = True
+        self._sprite_search_query = ""
+        self._sprite_search_focus = False
+        self._sprite_list_scroll = 0
+        self._sprite_row_hit: list[tuple[str, pygame.Rect]] = []
+
+        # FEATURE-MAP-107: reference grid overlay toggle (default on).
+        self._ref_grid_on = True
+
+        # FEATURE-MAP-109: rectangular marquee selection + clipboard.
+        self._selection_start: tuple[int, int] | None = None
+        self._selection_rect: tuple[int, int, int, int] | None = None
+        self._selecting = False
+        self._clipboard: pygame.Surface | None = None
+        self._last_canvas_pixel: tuple[int, int] | None = None
+
         self._dir_btns: list[pygame.Rect] = []
         self._frame_btns: list[pygame.Rect] = []
         self._palette_btns: list[pygame.Rect] = []
@@ -104,6 +130,11 @@ class NpcSpriteEditorModal:
         self._tool_paint_btn = pygame.Rect(0, 0, 1, 1)
         self._tool_eraser_btn = pygame.Rect(0, 0, 1, 1)
         self._tool_fill_btn = pygame.Rect(0, 0, 1, 1)
+        self._tool_select_btn = pygame.Rect(0, 0, 1, 1)
+        self._sprite_panel_rect = pygame.Rect(0, 0, 1, 1)
+        self._sprite_panel_toggle_btn = pygame.Rect(0, 0, 1, 1)
+        self._sprite_search_rect = pygame.Rect(0, 0, 1, 1)
+        self._ref_grid_toggle_btn = pygame.Rect(0, 0, 1, 1)
         self._color_preview_rect = pygame.Rect(0, 0, 1, 1)
         self._rgba_slider_rects: dict[str, pygame.Rect] = {}
         self._layer_row_hit: list[tuple[int, pygame.Rect, pygame.Rect, pygame.Rect]] = []
@@ -285,6 +316,25 @@ class NpcSpriteEditorModal:
         except pygame.error:
             self._reference_surf = None
 
+    def _filtered_sprite_names(self) -> list[str]:
+        """FEATURE-MAP-108: case-insensitive substring filter over Characters/*.png."""
+        names = list_character_pngs(self._characters_dir())
+        q = self._sprite_search_query.strip().lower()
+        if not q:
+            return names
+        return [n for n in names if q in n.lower()]
+
+    def _footer_start_y(self) -> int:
+        """FEATURE-MAP-106/107: y position of the palette/dims/file footer row.
+
+        Tracks the lower of the edit canvas and reference box so the footer moves up as
+        zoom (and therefore canvas height) decreases. Reserves _REF_LABEL_H below the
+        reference box for the yellow reference-name label (FEATURE-MAP-107) so it never
+        collides with the palette row.
+        """
+        ref_bottom = self._ref_rect.bottom + 4 + _REF_LABEL_H
+        return max(self._canvas_rect.bottom, ref_bottom) + 8
+
     def _cycle_reference(self, delta: int) -> None:
         names = list_character_pngs(self._characters_dir())
         if not names:
@@ -450,6 +500,64 @@ class NpcSpriteEditorModal:
             if self._direction_idx == 1 and self._mirror_lock:
                 self._sync_mirror_right_from_left()
 
+    def _start_selection(self, px: int, py: int) -> None:
+        self._selecting = True
+        self._selection_start = (px, py)
+        self._selection_rect = (px, py, px, py)
+
+    def _update_selection(self, px: int, py: int) -> None:
+        if self._selection_start is None:
+            return
+        cw, ch = self._cell_size()
+        sx, sy = self._selection_start
+        self._selection_rect = normalize_pixel_rect(sx, sy, px, py, cw, ch)
+
+    def _finish_selection(self) -> None:
+        self._selecting = False
+
+    def _copy_selection(self) -> None:
+        """FEATURE-MAP-109: copy the active layer's pixels within the selection rect."""
+        if self._selection_rect is None:
+            self.ed.set_status("No selection to copy.", kind="info")
+            return
+        x0, y0, x1, y1 = self._selection_rect
+        layer = self._active_layer_surface()
+        ox, oy = self._active_cell_origin()
+        w, h = x1 - x0 + 1, y1 - y0 + 1
+        self._clipboard = layer.subsurface((ox + x0, oy + y0, w, h)).copy()
+        self.ed.set_status(f"Copied {w}x{h}.", kind="ok")
+
+    def _paste_clipboard(self) -> None:
+        """FEATURE-MAP-109: stamp the clipboard onto the active layer.
+
+        Pastes at the last hovered canvas pixel when available, otherwise at the
+        selection's original top-left corner (or the cell origin as a last resort).
+        """
+        if self._clipboard is None:
+            self.ed.set_status("Clipboard empty.", kind="info")
+            return
+        if self._layer_edit_blocked():
+            return
+        cw, ch = self._cell_size()
+        clip_w, clip_h = self._clipboard.get_size()
+        if self._last_canvas_pixel is not None:
+            tx, ty = self._last_canvas_pixel
+        elif self._selection_rect is not None:
+            tx, ty = self._selection_rect[0], self._selection_rect[1]
+        else:
+            tx, ty = 0, 0
+        tx = max(0, min(cw - min(clip_w, cw), tx))
+        ty = max(0, min(ch - min(clip_h, ch), ty))
+        self._push_undo()
+        layer = self._active_layer_surface()
+        ox, oy = self._active_cell_origin()
+        layer.blit(self._clipboard, (ox + tx, oy + ty))
+        self._dirty = True
+        self._sheet = None
+        if self._direction_idx == 1 and self._mirror_lock:
+            self._sync_mirror_right_from_left()
+        self.ed.set_status(f"Pasted {clip_w}x{clip_h}.", kind="ok")
+
     def _add_layer(self) -> None:
         if len(self._layer_surfaces) >= MAX_NPC_LAYERS:
             self.ed.set_status(f"Max {MAX_NPC_LAYERS} layers.", kind="info")
@@ -514,6 +622,54 @@ class NpcSpriteEditorModal:
             pygame.draw.rect(ed.screen, col, (bar.x + 1, bar.y + 1, max(1, fill_w), bar_h - 2))
             pygame.draw.rect(ed.screen, (90, 100, 115), bar, 1)
         return y + 4 * (bar_h + gap)
+
+    def _draw_sprite_panel(self, ed: object) -> None:
+        """FEATURE-MAP-108: collapsible searchable list of Characters/*.png for the reference picker."""
+        r = self._sprite_panel_rect
+        pygame.draw.rect(ed.screen, (26, 30, 34), r)
+        pygame.draw.rect(ed.screen, (60, 70, 85), r, 1)
+        toggle_h = 20
+        self._sprite_panel_toggle_btn = pygame.Rect(r.x, r.y, r.w, toggle_h)
+        pygame.draw.rect(ed.screen, (40, 48, 56), self._sprite_panel_toggle_btn)
+        if self._sprite_panel_collapsed:
+            ed.screen.blit(ed.font_small.render("\u25B8", True, (200, 210, 225)), (r.x + 6, r.y + 3))
+            self._sprite_row_hit = []
+            return
+        ed.screen.blit(ed.font_small.render("\u25BE Sprites", True, (200, 210, 225)), (r.x + 4, r.y + 3))
+        self._sprite_search_rect = pygame.Rect(r.x + 4, r.y + toggle_h + 4, r.w - 8, 20)
+        pygame.draw.rect(ed.screen, (24, 30, 26), self._sprite_search_rect)
+        pygame.draw.rect(
+            ed.screen,
+            (120, 200, 140) if self._sprite_search_focus else (70, 80, 90),
+            self._sprite_search_rect,
+            1,
+        )
+        q = self._sprite_search_query
+        cursor = "|" if self._sprite_search_focus else ""
+        if q:
+            txt = mtext.truncate_to_width(ed.font_small, q + cursor, self._sprite_search_rect.w - 8)
+            txt_col = (220, 230, 240)
+        else:
+            txt = f"{cursor}search"
+            txt_col = (140, 150, 165)
+        ed.screen.blit(ed.font_small.render(txt, True, txt_col), (self._sprite_search_rect.x + 4, self._sprite_search_rect.y + 3))
+
+        list_rect = pygame.Rect(
+            r.x + 4, self._sprite_search_rect.bottom + 4, r.w - 8, r.bottom - self._sprite_search_rect.bottom - 8
+        )
+        names = self._filtered_sprite_names()
+        max_rows = max(1, list_rect.h // _SPRITE_ROW_H)
+        self._sprite_list_scroll = max(0, min(self._sprite_list_scroll, max(0, len(names) - max_rows)))
+        self._sprite_row_hit = []
+        ry = list_rect.y
+        for name in names[self._sprite_list_scroll : self._sprite_list_scroll + max_rows]:
+            row = pygame.Rect(list_rect.x, ry, list_rect.w, _SPRITE_ROW_H - 2)
+            if name == self._reference_name:
+                pygame.draw.rect(ed.screen, (45, 70, 58), row)
+            label = mtext.truncate_to_width(ed.font_small, name, row.w - 4)
+            ed.screen.blit(ed.font_small.render(label, True, (220, 230, 240)), (row.x + 2, row.y + 2))
+            self._sprite_row_hit.append((name, row))
+            ry += _SPRITE_ROW_H
 
     def draw(self) -> None:
         if not self.open:
@@ -608,12 +764,17 @@ class NpcSpriteEditorModal:
         cw, ch = self._cell_size()
         raw_w, raw_h = cw * self._zoom, ch * self._zoom
         pair_w = raw_w * 2 + 12
-        max_pair_w = body.w - _RAIL_W - 20
+        sprite_panel_w = _SPRITE_PANEL_COLLAPSED_W if self._sprite_panel_collapsed else _SPRITE_PANEL_EXPANDED_W
+        max_pair_w = body.w - sprite_panel_w - 6 - _RAIL_W - 20
         fit_scale = min(max_pair_w / max(1, pair_w), avail_h / max(1, raw_h), 1.0)
         canvas_w = max(32, int(raw_w * fit_scale))
         canvas_h = max(32, int(raw_h * fit_scale))
 
-        self._tool_rail_rect = pygame.Rect(body.x, y, _RAIL_W, avail_h)
+        self._sprite_panel_rect = pygame.Rect(body.x, y, sprite_panel_w, avail_h)
+        self._draw_sprite_panel(ed)
+
+        rail_x = self._sprite_panel_rect.right + 6
+        self._tool_rail_rect = pygame.Rect(rail_x, y, _RAIL_W, avail_h)
         pygame.draw.rect(ed.screen, (28, 32, 36), self._tool_rail_rect)
         pygame.draw.rect(ed.screen, (60, 70, 85), self._tool_rail_rect, 1)
         ry = self._tool_rail_rect.y + 6
@@ -626,6 +787,9 @@ class NpcSpriteEditorModal:
         ry += 28
         self._tool_fill_btn = pygame.Rect(self._tool_rail_rect.x + 6, ry, tw, 24)
         self._draw_tool_button(ed, self._tool_fill_btn, "Fill (F)", self._active_tool == "fill")
+        ry += 28
+        self._tool_select_btn = pygame.Rect(self._tool_rail_rect.x + 6, ry, tw, 24)
+        self._draw_tool_button(ed, self._tool_select_btn, "Select (S)", self._active_tool == "select")
         ry += 30
         self._color_preview_rect = pygame.Rect(self._tool_rail_rect.x + 6, ry, tw, 20)
         if self._paint_color[3] == 0:
@@ -689,11 +853,17 @@ class NpcSpriteEditorModal:
         for gy in range(ch + 1):
             ly = int(self._canvas_rect.y + gy * self._cell_step_y)
             pygame.draw.line(ed.screen, (50, 55, 65), (self._canvas_rect.x, ly), (self._canvas_rect.right, ly))
+        # FEATURE-MAP-109: marquee outline for the active rectangular selection.
+        if self._selection_rect is not None:
+            sx0, sy0, sx1, sy1 = self._selection_rect
+            mrx = int(self._canvas_rect.x + sx0 * self._cell_step_x)
+            mry = int(self._canvas_rect.y + sy0 * self._cell_step_y)
+            mrw = int((sx1 - sx0 + 1) * self._cell_step_x)
+            mrh = int((sy1 - sy0 + 1) * self._cell_step_y)
+            pygame.draw.rect(ed.screen, (255, 255, 255), (mrx, mry, mrw, mrh), 2)
 
-        ref_label_y = y - 18 if y > body.y + 16 else y
-        ref_avail = max(20, canvas_w)
-        ref_label = mtext.truncate_to_width(ed.font_small, self._reference_name or "(no ref)", ref_avail)
-        ed.screen.blit(ed.font_small.render(f"Ref: {ref_label}", True, (160, 175, 190)), (ref_x, ref_label_y))
+        # BUG-MAP-105/FEATURE-MAP-107: label moved below the reference image (was drawn
+        # in the ~gap above the canvas, which overlapped the toolbar row on narrow panels).
         pygame.draw.rect(ed.screen, (28, 32, 38), self._ref_rect)
         pygame.draw.rect(ed.screen, (70, 80, 95), self._ref_rect, 1)
         if self._reference_surf is not None:
@@ -704,10 +874,26 @@ class NpcSpriteEditorModal:
             )
             ref_scaled = pygame.transform.scale(ref_cell, (self._ref_rect.w, self._ref_rect.h))
             ed.screen.blit(ref_scaled, self._ref_rect.topleft)
+            if self._ref_grid_on and rcx > 0 and rcy > 0:
+                ref_step_x = self._ref_rect.w / rcx
+                ref_step_y = self._ref_rect.h / rcy
+                for gx in range(rcx + 1):
+                    lx = int(self._ref_rect.x + gx * ref_step_x)
+                    pygame.draw.line(ed.screen, (60, 65, 75), (lx, self._ref_rect.y), (lx, self._ref_rect.bottom))
+                for gy in range(rcy + 1):
+                    ly = int(self._ref_rect.y + gy * ref_step_y)
+                    pygame.draw.line(ed.screen, (60, 65, 75), (self._ref_rect.x, ly), (self._ref_rect.right, ly))
         else:
             ed.screen.blit(ed.font_small.render("Reference", True, (120, 130, 145)), (self._ref_rect.x + 8, self._ref_rect.y + 8))
+        self._ref_grid_toggle_btn = pygame.Rect(self._ref_rect.right - 50, self._ref_rect.y + 4, 46, 16)
+        pygame.draw.rect(ed.screen, (48, 64, 56) if self._ref_grid_on else (48, 48, 56), self._ref_grid_toggle_btn)
+        pygame.draw.rect(ed.screen, (140, 150, 170), self._ref_grid_toggle_btn, 1)
+        ed.screen.blit(ed.font_small.render("Grid", True, (220, 230, 235)), (self._ref_grid_toggle_btn.x + 4, self._ref_grid_toggle_btn.y + 1))
+        ref_label_y = self._ref_rect.bottom + 4
+        ref_label = mtext.truncate_to_width(ed.font_small, self._reference_name or "(no ref)", max(20, canvas_w))
+        ed.screen.blit(ed.font_small.render(ref_label, True, _REF_LABEL_COLOR), (ref_x, ref_label_y))
 
-        pal_y = max(self._canvas_rect.bottom, self._ref_rect.bottom) + 8
+        pal_y = self._footer_start_y()
         swatch = 22
         self._palette_btns = []
         for i, col in enumerate(self._palette_colors):
@@ -855,6 +1041,44 @@ class NpcSpriteEditorModal:
                 self._dim_edit_buf += event.unicode
                 return True
             return True
+        # FEATURE-MAP-108: sprite search box captures all typing (high priority, like the
+        # other text-entry modes above) so letters such as P/E/F/S/Z/R don't trigger tools.
+        if self._sprite_search_focus:
+            if event.key == pygame.K_ESCAPE:
+                self._sprite_search_focus = False
+                return True
+            if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                self._sprite_search_focus = False
+                return True
+            if event.key == pygame.K_BACKSPACE:
+                self._sprite_search_query = self._sprite_search_query[:-1]
+                return True
+            if event.unicode and event.unicode.isprintable():
+                self._sprite_search_query += event.unicode
+                return True
+            return True
+
+        ctrl = bool(event.mod & pygame.KMOD_CTRL)
+        shift = bool(event.mod & pygame.KMOD_SHIFT)
+
+        # FEATURE-MAP-110: Ctrl-combos checked first so plain S still means "select tool".
+        if ctrl and shift and event.key == pygame.K_s:
+            self._save_sheet(save_as=True)
+            return True
+        if ctrl and event.key == pygame.K_s:
+            self._save_sheet(save_as=False)
+            return True
+        if ctrl and event.key == pygame.K_c:
+            self._copy_selection()
+            return True
+        if ctrl and event.key == pygame.K_v:
+            self._paste_clipboard()
+            return True
+
+        if event.key == pygame.K_ESCAPE and self._selection_rect is not None:
+            self._selection_rect = None
+            self._selection_start = None
+            return True
         if event.key == pygame.K_p:
             self._active_tool = "paint"
             return True
@@ -864,13 +1088,18 @@ class NpcSpriteEditorModal:
         if event.key == pygame.K_f:
             self._active_tool = "fill"
             return True
-        if event.key == pygame.K_z and (event.mod & pygame.KMOD_CTRL):
+        if event.key == pygame.K_s:
+            self._active_tool = "select"
+            return True
+        # FEATURE-MAP-110: plain Z/R undo-redo (replacing Ctrl+Z/Ctrl+Y), consistent with
+        # the other single-key tool shortcuts (P/E/F/S).
+        if event.key == pygame.K_z:
             if self._undo_stack:
                 self._redo_stack.append(self._snapshot_layers())
                 self._restore_layers(self._undo_stack.pop())
                 self._dirty = True
             return True
-        if event.key == pygame.K_y and (event.mod & pygame.KMOD_CTRL):
+        if event.key == pygame.K_r:
             if self._redo_stack:
                 self._undo_stack.append(self._snapshot_layers())
                 self._restore_layers(self._redo_stack.pop())
@@ -881,6 +1110,9 @@ class NpcSpriteEditorModal:
     def handle_wheel(self, mx: int, my: int, dy: int) -> bool:
         if not self.open:
             return False
+        if not self._sprite_panel_collapsed and self._sprite_panel_rect.collidepoint(mx, my):
+            self._sprite_list_scroll = max(0, self._sprite_list_scroll - dy)
+            return True
         if self._tool_rail_rect.collidepoint(mx, my):
             self._layer_scroll = max(0, self._layer_scroll - dy)
             return True
@@ -911,6 +1143,8 @@ class NpcSpriteEditorModal:
     def handle_mouse_down(self, mx: int, my: int, button: int) -> bool:
         if not self.open:
             return False
+        if button == 1 and not self._sprite_search_rect.collidepoint(mx, my):
+            self._sprite_search_focus = False
         if self._swatch_edit_open:
             if self._swatch_edit_done_btn.collidepoint(mx, my) and button == 1:
                 self._palette_colors = list(self._swatch_edit_working)
@@ -957,6 +1191,22 @@ class NpcSpriteEditorModal:
             self._drag_ref = (mx - self.panel_rect.x, my - self.panel_rect.y, 0, 0)
             return True
         if button == 1:
+            if self._sprite_panel_toggle_btn.collidepoint(mx, my):
+                self._sprite_panel_collapsed = not self._sprite_panel_collapsed
+                return True
+            if not self._sprite_panel_collapsed:
+                if self._sprite_search_rect.collidepoint(mx, my):
+                    self._sprite_search_focus = True
+                    return True
+                for name, row in self._sprite_row_hit:
+                    if row.collidepoint(mx, my):
+                        self._reference_name = name
+                        self._load_reference_surface()
+                        self._sprite_search_focus = False
+                        return True
+            if self._ref_grid_toggle_btn.collidepoint(mx, my):
+                self._ref_grid_on = not self._ref_grid_on
+                return True
             for ch, bar in self._rgba_slider_rects.items():
                 if bar.collidepoint(mx, my):
                     self._rgba_drag_channel = ch
@@ -970,6 +1220,9 @@ class NpcSpriteEditorModal:
                 return True
             if self._tool_fill_btn.collidepoint(mx, my):
                 self._active_tool = "fill"
+                return True
+            if self._tool_select_btn.collidepoint(mx, my):
+                self._active_tool = "select"
                 return True
             if self._layer_add_btn.collidepoint(mx, my):
                 self._add_layer()
@@ -1052,6 +1305,18 @@ class NpcSpriteEditorModal:
                     self._active_tool = "paint"
                     return True
         if self._canvas_rect.collidepoint(mx, my):
+            pix = self._pixel_at_canvas(mx, my)
+            if pix is not None:
+                self._last_canvas_pixel = pix
+            if self._active_tool == "select":
+                if button == 1 and pix is not None:
+                    self._start_selection(*pix)
+                    return True
+                if button == 3:
+                    self._selection_rect = None
+                    self._selection_start = None
+                    return True
+                return True
             if self._active_tool == "fill" and button == 1:
                 self._push_undo()
                 self._fill_at(mx, my)
@@ -1072,6 +1337,8 @@ class NpcSpriteEditorModal:
             if button == self._paint_button:
                 self._paint_button = None
                 self._paint_last = None
+            if button == 1 and self._selecting:
+                self._finish_selection()
             self._rgba_drag_channel = None
             self._drag_mode = "none"
             return True
@@ -1109,6 +1376,13 @@ class NpcSpriteEditorModal:
                 pygame.Rect(mx - ox, my - oy, self.panel_rect.w, self.panel_rect.h),
                 canvas,
             )
+            return True
+        pix = self._pixel_at_canvas(mx, my)
+        if pix is not None:
+            self._last_canvas_pixel = pix
+        if self._selecting:
+            if pix is not None:
+                self._update_selection(*pix)
             return True
         if self._paint_button is not None:
             self._paint_at(mx, my, self._paint_button)

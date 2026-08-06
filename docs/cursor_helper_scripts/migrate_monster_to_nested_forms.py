@@ -3,7 +3,7 @@
 Flattened monster.json -> one top-level key per species, nested alternateForme* objects.
 Sort Pokemon keys by pokedexNum ascending.
 
-Run: python3 tools/migrate_monster_to_nested_forms.py
+Run: python3 docs/cursor_helper_scripts/migrate_monster_to_nested_forms.py
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import sys
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 MONSTER_PATH = os.path.join(ROOT, "src", "monster.json")
 
 FORM_ONE = "alternateFormeOne"

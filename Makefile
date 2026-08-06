@@ -92,7 +92,7 @@ run: $(TARGET)
 
 # Regenerate map script opcode list for Python editor (FEATURE-MAP-044 / FEATURE-MAP-048: scans src/op.cpp)
 regen-event-ops:
-	python3 tools/extract_map_script_ops.py
+	python3 docs/cursor_helper_scripts/extract_map_script_ops.py
 
 .PHONY: all clean run regen-event-ops test test-script-runtime test-game-state
 

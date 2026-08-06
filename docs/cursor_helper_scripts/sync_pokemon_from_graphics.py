@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
 Scan src/Graphics/Pokemon/Front and Back for paired PNGs, fetch typings + stats from
-PokeAPI (cached in tools/.pokeapi_cache.json), and rewrite the "Pokemon" section of
+PokeAPI (cached in docs/cursor_helper_scripts/.pokeapi_cache.json), and rewrite the "Pokemon" section of
 src/monster.json as nested species (one JSON key per species, alternateForme* for
 variants) while preserving MoveCatalog.
 
 Uses a thread pool for parallel fetches; responses are cached. First run needs network.
 
-Usage: python3 tools/sync_pokemon_from_graphics.py
+Usage: python3 docs/cursor_helper_scripts/sync_pokemon_from_graphics.py
 """
 
 from __future__ import annotations
@@ -24,11 +24,11 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional, Tuple
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 FRONT = os.path.join(ROOT, "src", "Graphics", "Pokemon", "Front")
 BACK = os.path.join(ROOT, "src", "Graphics", "Pokemon", "Back")
 MONSTER_PATH = os.path.join(ROOT, "src", "monster.json")
-CACHE_PATH = os.path.join(ROOT, "tools", ".pokeapi_cache.json")
+CACHE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".pokeapi_cache.json")
 
 DEFAULT_MOVES = ["tackle", "growl"]
 CTX = ssl.create_default_context()

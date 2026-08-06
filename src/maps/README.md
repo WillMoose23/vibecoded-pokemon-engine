@@ -25,7 +25,7 @@ Maps are tile grids plus optional **connections** to other map ids (for future o
 
 **C++ rendering:** After loading [`MapData`](../../include/map_data.h), draw each entry in `tileLayers` in order (index `0` = back, last = front). For each `(y, x)`, skip cells with `empty == true` / null. Then apply gameplay overlays (walk/debug) as needed.
 
-Validate with: `python3 tools/validate_maps.py`
+Validate with: `python3 docs/cursor_helper_scripts/validate_maps.py`
 
 Edit interactively with: `python3 tools/map_editor.py` (requires Pygame: `python3 -m pip install pygame`). If `pip` is not a command on your system, use `python3 -m pip` instead of `pip`.
 

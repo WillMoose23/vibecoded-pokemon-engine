@@ -2,7 +2,7 @@
 """
 Validate src/tilesets.json and all src/maps/*.json (stdlib only).
 
-Usage: python3 tools/validate_maps.py
+Usage: python3 docs/cursor_helper_scripts/validate_maps.py
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import os
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 TILESETS_PATH = ROOT / "src" / "tilesets.json"
 MAPS_DIR = ROOT / "src" / "maps"
 MAPS_INDEX_NAME = "maps_index.json"

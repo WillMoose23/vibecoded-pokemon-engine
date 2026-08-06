@@ -1026,7 +1026,7 @@ FILE: src/pokemon.cpp
 FILE: include/script_engine.h / src/script_engine.cpp
 
     PURPOSE:
-        FEATURE-MAP-030 / FEATURE-MAP-043 / FEATURE-MAP-048 / FEATURE-MAP-049: JSON script interpreter for map events. `ScriptRuntime::loadDocument` accepts legacy `actions` arrays (`op` + `args`) or FEATURE-MAP-043 files where a non-empty `script_1` array of one-key objects (each object maps one opcode to args) normalizes to the same internal `actions` list; optional `script_1` object form is also accepted. `ScriptRuntime::stepFrame` delegates opcode handling to `mapScriptDispatchOpcode` in `src/op.cpp` (including `camera_follow_player`, which defers map-viewer camera reset to `Game::tryMapViewerScriptOpcode_`). Opcodes and map-editor alignment are documented in `docs/event_script_ops.md`. FEATURE-MAP-044 / FEATURE-MAP-048 / FEATURE-MAP-049: Python map-editor tooling uses `tools/extract_map_script_ops.py` on `src/op.cpp` → `tools/event_script_ops_generated.py` plus `tools/event_script_op_meta.json` and `tools/event_script_opcode_docs.py`.
+        FEATURE-MAP-030 / FEATURE-MAP-043 / FEATURE-MAP-048 / FEATURE-MAP-049: JSON script interpreter for map events. `ScriptRuntime::loadDocument` accepts legacy `actions` arrays (`op` + `args`) or FEATURE-MAP-043 files where a non-empty `script_1` array of one-key objects (each object maps one opcode to args) normalizes to the same internal `actions` list; optional `script_1` object form is also accepted. `ScriptRuntime::stepFrame` delegates opcode handling to `mapScriptDispatchOpcode` in `src/op.cpp` (including `camera_follow_player`, which defers map-viewer camera reset to `Game::tryMapViewerScriptOpcode_`). Opcodes and map-editor alignment are documented in `docs/event_script_ops.md`. FEATURE-MAP-044 / FEATURE-MAP-048 / FEATURE-MAP-049: Python map-editor tooling uses `docs/cursor_helper_scripts/extract_map_script_ops.py` on `src/op.cpp` → `tools/event_script_ops_generated.py` plus `tools/event_script_op_meta.json` and `tools/event_script_opcode_docs.py`.
 
     DEPENDENCIES:
             - nlohmann::json
@@ -1062,7 +1062,7 @@ FILE: include/game_state.h / src/game_state.cpp
 FILE: include/op.h / src/op.cpp
 
     PURPOSE:
-        FEATURE-MAP-048: single entry point for map script opcode string dispatch used by `ScriptRuntime::stepFrame`; keeps `if (op == "...")` literals in one translation unit for `tools/extract_map_script_ops.py`. Built-in opcodes (end_script, flags, messages, warp, facing string) run here; map viewer movement/camera opcodes delegate through `ScriptRuntime::tryMapViewerScriptStep` when set.
+        FEATURE-MAP-048: single entry point for map script opcode string dispatch used by `ScriptRuntime::stepFrame`; keeps `if (op == "...")` literals in one translation unit for `docs/cursor_helper_scripts/extract_map_script_ops.py`. Built-in opcodes (end_script, flags, messages, warp, facing string) run here; map viewer movement/camera opcodes delegate through `ScriptRuntime::tryMapViewerScriptStep` when set.
 
     DEPENDENCIES:
             - `script_engine.h` (`ScriptRuntime`, `ScriptStepResult`)

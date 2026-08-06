@@ -8,11 +8,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 OP_CPP = ROOT / "src" / "op.cpp"
 MAP_VIEW_CPP = ROOT / "src" / "map_view.cpp"
 META = ROOT / "tools" / "event_script_op_meta.json"
-EXTRACT = ROOT / "tools" / "extract_map_script_ops.py"
+EXTRACT = Path(__file__).resolve().parent / "extract_map_script_ops.py"
 
 OP_PATTERN = re.compile(r'if\s*\(\s*op\s*==\s*"([^"]+)"\s*\)')
 

@@ -9,6 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 TOOLS = ROOT / "tools"
+CURSOR_SCRIPTS = ROOT / "docs" / "cursor_helper_scripts"
 
 
 def _run(cmd: list[str], *, cwd: Path = ROOT) -> subprocess.CompletedProcess[str]:
@@ -32,21 +33,21 @@ class TestPhase7AutomatedMatrix(unittest.TestCase):
         self.assertIn("all checks passed", r.stdout)
 
     def test_extract_map_script_ops(self) -> None:
-        r = _run([sys.executable, "tools/extract_map_script_ops.py"])
+        r = _run([sys.executable, str(CURSOR_SCRIPTS / "extract_map_script_ops.py")])
         self.assertEqual(r.returncode, 0, msg=r.stderr or r.stdout)
         self.assertIn("38 ops", r.stdout)
 
     def test_audit_event_script_ops(self) -> None:
-        r = _run([sys.executable, "tools/audit_event_script_ops.py"])
+        r = _run([sys.executable, str(CURSOR_SCRIPTS / "audit_event_script_ops.py")])
         self.assertEqual(r.returncode, 0, msg=r.stderr or r.stdout)
         self.assertIn("OK", r.stdout)
 
     def test_validate_map_events(self) -> None:
-        r = _run([sys.executable, "tools/validate_map_events.py"])
+        r = _run([sys.executable, str(CURSOR_SCRIPTS / "validate_map_events.py")])
         self.assertEqual(r.returncode, 0, msg=r.stderr or r.stdout)
 
     def test_migrate_map_events_dry_run(self) -> None:
-        r = _run([sys.executable, "tools/migrate_map_events.py"])
+        r = _run([sys.executable, str(CURSOR_SCRIPTS / "migrate_map_events.py")])
         self.assertEqual(r.returncode, 0, msg=r.stderr or r.stdout)
         combined = (r.stdout or "") + (r.stderr or "")
         self.assertIn("DRY-RUN", combined)

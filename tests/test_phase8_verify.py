@@ -13,6 +13,7 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 ROOT = Path(__file__).resolve().parents[1]
 TOOLS = ROOT / "tools"
+CURSOR_SCRIPTS = ROOT / "docs" / "cursor_helper_scripts"
 SRC = ROOT / "src"
 
 if str(TOOLS) not in sys.path:
@@ -109,7 +110,7 @@ class TestPhase8RuntimeSmoke(unittest.TestCase):
 
     def test_audit_event_script_ops_ok(self) -> None:
         r = subprocess.run(
-            [sys.executable, "tools/audit_event_script_ops.py"],
+            [sys.executable, str(CURSOR_SCRIPTS / "audit_event_script_ops.py")],
             cwd=str(ROOT),
             capture_output=True,
             text=True,

@@ -230,6 +230,23 @@ def parse_palette_from_config(raw: list | None) -> list[RGBA]:
     return out if out else list(DEFAULT_NPC_PALETTE)
 
 
+def normalize_pixel_rect(
+    x0: int, y0: int, x1: int, y1: int, max_w: int, max_h: int
+) -> tuple[int, int, int, int]:
+    """Order two drag-selected pixel corners and clamp into [0, max_w-1] x [0, max_h-1].
+
+    Returns (min_x, min_y, max_x, max_y), inclusive on both ends. Used by the NPC sprite
+    editor's rectangular marquee selection tool (FEATURE-MAP-109).
+    """
+    lo_x, hi_x = (x0, x1) if x0 <= x1 else (x1, x0)
+    lo_y, hi_y = (y0, y1) if y0 <= y1 else (y1, y0)
+    lo_x = max(0, min(max_w - 1, lo_x))
+    hi_x = max(0, min(max_w - 1, hi_x))
+    lo_y = max(0, min(max_h - 1, lo_y))
+    hi_y = max(0, min(max_h - 1, hi_y))
+    return lo_x, lo_y, hi_x, hi_y
+
+
 def sanitize_character_filename(name: str) -> str:
     """Basename safe for src/Graphics/Characters/."""
     base = Path(name.strip()).name

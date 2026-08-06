@@ -772,6 +772,7 @@ class MapEditor:
         self.world_btn_rect = pygame.Rect(0, 0, 32, 32)
         self.layer_chip_rect = pygame.Rect(0, 0, 1, 1)
         self.layer_chip_lock_btn = pygame.Rect(0, 0, 1, 1)
+        self._map_toolbar_left = 0  # BUG-MAP-106: left edge of toolbar button cluster
         self.map_canvas_rect = pygame.Rect(0, 0, 1, 1)
         self.settings_add_event_rect = pygame.Rect(0, 0, 1, 1)
         self.settings_remove_event_rect = pygame.Rect(0, 0, 1, 1)
@@ -2010,6 +2011,10 @@ class MapEditor:
         self.events_btn_rect = pygame.Rect(
             self.world_btn_rect.x - btn_gap - events_w, self.world_btn_rect.y, events_w, self.world_btn_rect.h
         )
+        # BUG-MAP-106: left edge of the Event/Overworld/Help/Settings cluster, so the layer
+        # lock button (drawn on the same chip row) can be placed clear of it instead of
+        # overlapping Settings at the shared right edge.
+        self._map_toolbar_left = self.events_btn_rect.x
         self._clamp_palette_scroll()
         self._tileset_list_header_h = self._measure_tileset_list_header_height()
         self._clamp_tileset_list_scroll()
@@ -4449,8 +4454,12 @@ class MapEditor:
         pygame.draw.rect(self.screen, chip_bg, self.layer_chip_rect)
         pygame.draw.rect(self.screen, (120, 120, 140), self.layer_chip_rect, 1)
         lock_w = 30
+        lock_gap = 6
+        # BUG-MAP-106: anchor left of the Event/Overworld/Help/Settings cluster (not the chip's
+        # own right edge) so the lock button no longer renders on top of the Settings button.
+        toolbar_left = self._map_toolbar_left or self.layer_chip_rect.right
         self.layer_chip_lock_btn = pygame.Rect(
-            self.layer_chip_rect.right - lock_w - 6,
+            toolbar_left - lock_gap - lock_w,
             self.layer_chip_rect.y + 4,
             lock_w,
             self.layer_chip_rect.h - 8,
@@ -5900,7 +5909,7 @@ class MapEditor:
                     "Wild Encounters, Audio Engine, and Battle Editor.",
                     "Event anchors, scripts, triggers, and sprites are edited in Event Engine — "
                     "not on the main map canvas. Wild patch painting remains on the map when the "
-                    "Wild Encounters modal is open. Validate with: python3 tools/validate_map_events.py",
+                    "Wild Encounters modal is open. Validate with: python3 docs/cursor_helper_scripts/validate_map_events.py",
                     "NPC character sprites: Events hub → NPC Sprites, or see Help → NPC Sprites tab.",
                 ],
             )
@@ -5924,6 +5933,9 @@ class MapEditor:
                     "Paint (P): brush — left-drag paints with the current color; right-click erases one pixel.",
                     "Eraser (E): brush that clears pixels to transparent on drag.",
                     "Fill (F): click to flood-fill a connected opaque region with the current color.",
+                    "Select (S): drag a rectangular marquee on the canvas. Ctrl+C copies the active layer's "
+                    "pixels in the selection; Ctrl+V pastes the clipboard at the last hovered canvas pixel "
+                    "(or the selection's original spot if the canvas isn't hovered). Escape clears the selection.",
                     "RGBA sliders: set pen color including alpha. Current swatch shows the active color.",
                 ],
             )
@@ -5938,13 +5950,24 @@ class MapEditor:
                     "Idle→F3, Dup prev, and frame copy operate on the active layer.",
                 ],
             )
+            out.append(("head", "Sprite search panel", None))
+            self._help_append_paragraphs(
+                out,
+                wrap_w,
+                [
+                    "Collapsible strip on the far left of the canvas area (▸/▾ toggle). Expand it to search "
+                    "src/Graphics/Characters/*.png by name and click a result to set it as the reference image.",
+                ],
+            )
             out.append(("head", "Canvas and reference", None))
             self._help_append_paragraphs(
                 out,
                 wrap_w,
                 [
                     "Direction and frame tabs choose which cell you edit. Edit canvas and reference preview "
-                    "are the same size; wheel on canvas zooms (default 8 px per sprite pixel).",
+                    "are the same size; wheel on canvas zooms (default 12 px per sprite pixel).",
+                    "The reference name is shown in yellow below the reference picture. The Grid button in "
+                    "its top-right corner toggles a pixel grid overlay on the reference image.",
                     "Mirror R←L copies the Left direction row to Right after left-side edits.",
                     "Preset swatches below the canvas; Edit Swatches opens an overlay to add/remove colors "
                     "(saved to map_editor_config.json).",
@@ -5956,7 +5979,8 @@ class MapEditor:
                 wrap_w,
                 [
                     "Save / Save As write the composited PNG. New / Load reset or import a sheet into layer 1.",
-                    "W / H fields resize the sheet grid. Ctrl+Z / Ctrl+Y undo and redo layer edits.",
+                    "W / H fields resize the sheet grid. Z / R undo and redo layer edits (plain keys, like "
+                    "P/E/F/S). Ctrl+S saves, Ctrl+Shift+S is Save As, Ctrl+C/Ctrl+V copy and paste a selection.",
                     "Help button opens this tab. Back returns to the Events launcher.",
                 ],
             )

@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+CURSOR_SCRIPTS = ROOT / "docs" / "cursor_helper_scripts"
 
 
 def _load_generated():
@@ -23,7 +24,7 @@ def _load_generated():
 class TestEventScriptOpcodeParity(unittest.TestCase):
     def test_extract_script_ops_exits_zero(self) -> None:
         r = subprocess.run(
-            [sys.executable, str(ROOT / "tools" / "extract_map_script_ops.py")],
+            [sys.executable, str(CURSOR_SCRIPTS / "extract_map_script_ops.py")],
             cwd=str(ROOT),
             capture_output=True,
             text=True,
@@ -32,7 +33,7 @@ class TestEventScriptOpcodeParity(unittest.TestCase):
 
     def test_audit_event_script_ops_exits_zero(self) -> None:
         r = subprocess.run(
-            [sys.executable, str(ROOT / "tools" / "audit_event_script_ops.py")],
+            [sys.executable, str(CURSOR_SCRIPTS / "audit_event_script_ops.py")],
             cwd=str(ROOT),
             capture_output=True,
             text=True,

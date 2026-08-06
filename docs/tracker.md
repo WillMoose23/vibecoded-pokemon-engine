@@ -1,5 +1,279 @@
 # Issue tracker
 
+## REFACTOR-TOOLS-001
+
+```
+ID: REFACTOR-TOOLS-001
+TYPE: REFACTOR
+TITLE: Relocate validators and non-editor utilities to docs/cursor_helper_scripts
+
+DESCRIPTION:
+The tools/ directory mixed the pygame map/event editor runtime with standalone
+validators, opcode extract/audit scripts, one-off migrations, and data-sync
+utilities. Moved those non-runtime scripts to docs/cursor_helper_scripts/ and
+updated Makefile targets, tests, README paths, and documentation references.
+
+EXPECTED_BEHAVIOR:
+- tools/ contains only map_editor.py, its modals, helpers, and editor config.
+- Validators and utilities run from docs/cursor_helper_scripts/ with unchanged behavior.
+- make regen-event-ops and python unit tests pass.
+
+SCOPE:
+docs/cursor_helper_scripts/*.py (moved from tools/), Makefile, README.md,
+tools/map_editor.py, tests, docs/tools_doc.md, docs/source_doc.md,
+docs/cursor_helper_scripts/README.md, .cursor/skills/event-script-opcode-docs/SKILL.md
+
+PRIORITY: LOW
+STATUS: DONE
+ASSIGNED_TO: Cursor
+```
+
+## BUG-MAP-106
+
+```
+ID: BUG-MAP-106
+TYPE: BUG
+TITLE: Map toolbar layer-lock button overlaps the Settings button
+
+DESCRIPTION:
+FEATURE-MAP-103 anchored the tile layer lock button to the right edge of
+layer_chip_rect, but IMPROVEMENT-MAP-093/094 already anchors the Event /
+Overworld / Help / Settings buttons to the same map_viewport_rect right edge
+on the same chip row. The lock square rendered on top of Settings.
+
+STEPS_TO_REPRODUCE:
+1. Open the map editor.
+2. Look at the top-right of the map chip row.
+3. Observe the lock icon square overlapping the Settings button.
+
+EXPECTED_BEHAVIOR:
+The lock button sits clear of the Event/Overworld/Help/Settings cluster with
+no visual overlap, at any window size.
+
+ACTUAL_BEHAVIOR:
+Lock button renders directly on/under the Settings button.
+
+SCOPE:
+tools/map_editor.py (relayout, draw)
+
+PRIORITY: MEDIUM
+STATUS: DONE
+ASSIGNED_TO: Cursor
+
+ROOT CAUSE:
+Both layer_chip_lock_btn and the toolbar button cluster were positioned from
+the same map_viewport_rect.right anchor independently, with no shared layout
+reference between them.
+
+FIX:
+relayout() now records self._map_toolbar_left (left edge of the Event button,
+i.e. the toolbar cluster). draw() anchors layer_chip_lock_btn immediately left
+of that value instead of layer_chip_rect.right, and chip text truncation uses
+the same boundary.
+```
+
+## BUG-MAP-105
+
+```
+ID: BUG-MAP-105
+TYPE: BUG
+TITLE: NPC sprite editor reference label overlaps toolbar row at narrow widths
+
+DESCRIPTION:
+The "Ref: <name>" label was drawn at ref_label_y = y - 18, in the ~gap between
+the last toolbar button row and the canvas/reference boxes. On narrower
+panels the label collided with the Zoom/Save toolbar row above it.
+
+STEPS_TO_REPRODUCE:
+1. Open Events → NPC Sprites with a reference PNG loaded.
+2. Resize the modal narrower (drag the bottom-right corner).
+3. Observe the "Ref: <name>" text overlapping the toolbar row.
+
+EXPECTED_BEHAVIOR:
+Reference label never collides with any toolbar row, at any panel size.
+
+ACTUAL_BEHAVIOR:
+Label text rendered on top of the Zoom/Save/</> toolbar row.
+
+SCOPE:
+tools/npc_sprite_editor_modal.py (draw)
+
+PRIORITY: MEDIUM
+STATUS: DONE
+ASSIGNED_TO: Cursor
+
+ROOT CAUSE:
+ref_label_y was computed from the toolbar's post-wrap y position with only a
+fixed 18px offset, independent of how many toolbar rows the width forced.
+
+FIX:
+Removed the above-canvas label entirely; the reference name now renders below
+the reference picture (FEATURE-MAP-107), which structurally cannot collide
+with the toolbar row above.
+```
+
+## FEATURE-MAP-106
+
+```
+ID: FEATURE-MAP-106
+TYPE: FEATURE
+TITLE: NPC sprite editor default zoom 12; footer tracks canvas height
+
+DESCRIPTION:
+Raised the default edit zoom from 8 to 12 px per sprite pixel (config and
+code default). Extracted the palette/dims/filename footer y-position into
+_footer_start_y() so its "moves up as the canvas shrinks at low zoom"
+behavior is directly unit-tested rather than implicit in draw().
+
+EXPECTED_BEHAVIOR:
+- Fresh editor opens at zoom 12.
+- _footer_start_y() strictly decreases as _zoom decreases.
+
+SCOPE:
+tools/npc_sprite_editor_modal.py, tools/map_editor_config.json
+
+PRIORITY: LOW
+STATUS: DONE
+ASSIGNED_TO: Cursor
+```
+
+## FEATURE-MAP-107
+
+```
+ID: FEATURE-MAP-107
+TYPE: FEATURE
+TITLE: NPC sprite editor reference label placement/color + grid overlay toggle
+
+DESCRIPTION:
+Reference sprite name now renders below the reference picture in yellow
+instead of above the canvas row. Added a "Grid" toggle button in the
+reference box's top-right corner that overlays a pixel grid on the loaded
+reference image, sized to the reference's own per-cell pixel dimensions.
+
+EXPECTED_BEHAVIOR:
+- Reference label always below the picture, colored (255, 225, 90).
+- Grid toggle flips _ref_grid_on; grid lines drawn only when a reference
+  image is loaded and the toggle is on.
+- Footer row leaves room for the label so it never collides with the
+  palette/dims row below.
+
+SCOPE:
+tools/npc_sprite_editor_modal.py
+
+PRIORITY: LOW
+STATUS: DONE
+ASSIGNED_TO: Cursor
+```
+
+## FEATURE-MAP-108
+
+```
+ID: FEATURE-MAP-108
+TYPE: FEATURE
+TITLE: NPC sprite editor collapsible sprite search panel (reference picker)
+
+DESCRIPTION:
+Added a collapsible strip to the left of the tool rail (collapsed by default,
+22px; expands to 150px) with a search box and scrollable, filtered list of
+src/Graphics/Characters/*.png. Clicking a result sets it as the reference
+image, replacing the </> cycle-only workflow.
+
+EXPECTED_BEHAVIOR:
+- Panel toggle expands/collapses without affecting other layout state.
+- Search text filters the list case-insensitively (substring match).
+- Clicking a row sets _reference_name and reloads the reference surface.
+- Typing in the search box does not trigger P/E/F/S/Z/R tool shortcuts.
+
+SCOPE:
+tools/npc_sprite_editor_modal.py
+
+PRIORITY: MEDIUM
+STATUS: DONE
+ASSIGNED_TO: Cursor
+```
+
+## FEATURE-MAP-109
+
+```
+ID: FEATURE-MAP-109
+TYPE: FEATURE
+TITLE: NPC sprite editor rectangular selector tool with copy/paste
+
+DESCRIPTION:
+New Select (S) tool: drag on the canvas to define a rectangular marquee in
+active-cell pixel space. Ctrl+C copies the active layer's pixels in the
+selection to an in-memory clipboard surface; Ctrl+V pastes the clipboard onto
+the active layer at the last hovered canvas pixel (or the selection's
+original top-left if the canvas isn't hovered), clamped to the cell bounds.
+Escape clears an active selection. Respects layer lock.
+
+EXPECTED_BEHAVIOR:
+- Selection rect always normalized/clamped within the active cell.
+- Copy with no selection reports "No selection to copy."; paste with an
+  empty clipboard reports "Clipboard empty."
+- Paste is blocked (and reports "Layer locked.") when the active layer is
+  locked; pushes an undo snapshot before mutating pixels.
+
+SCOPE:
+tools/npc_sprite_editor_modal.py, tools/npc_sprite_sheet_helpers.py
+(normalize_pixel_rect)
+
+PRIORITY: MEDIUM
+STATUS: DONE
+ASSIGNED_TO: Cursor
+```
+
+## FEATURE-MAP-110
+
+```
+ID: FEATURE-MAP-110
+TYPE: FEATURE
+TITLE: NPC sprite editor expanded keyboard shortcuts
+
+DESCRIPTION:
+Replaced Ctrl+Z / Ctrl+Y undo/redo with plain Z / R, consistent with the
+existing single-key tool shortcuts (P/E/F/S). Added Ctrl+S (save), Ctrl+Shift+S
+(save as), Ctrl+C (copy selection), Ctrl+V (paste clipboard). Ctrl-combos are
+checked before the plain-key tool shortcuts so plain S still selects the
+Select tool.
+
+EXPECTED_BEHAVIOR:
+- Z undoes, R redoes, without any modifier.
+- Ctrl+S / Ctrl+Shift+S save / save-as; Ctrl+C / Ctrl+V copy / paste.
+- Plain S sets the Select tool; Ctrl+S does not change the active tool.
+
+SCOPE:
+tools/npc_sprite_editor_modal.py
+
+PRIORITY: LOW
+STATUS: DONE
+ASSIGNED_TO: Cursor
+```
+
+## IMPROVEMENT-DOC-008
+
+```
+ID: IMPROVEMENT-DOC-008
+TYPE: IMPROVEMENT
+TITLE: Add README screenshots for map editor, Event Engine, and game
+
+DESCRIPTION:
+README setup instructions had no visual examples. Added four screenshots
+(map editor tile mode, world layout, Event Engine, in-game overworld) under
+docs/images/ and embedded them in a Screenshots section.
+
+EXPECTED_BEHAVIOR:
+- README shows captioned images for the map editor, Event Engine, and game.
+- Image assets live in docs/images/ and render on GitHub via relative paths.
+
+SCOPE:
+README.md, docs/images/screenshot-01.png through screenshot-04.png
+
+PRIORITY: LOW
+STATUS: DONE
+ASSIGNED_TO: Cursor
+```
+
 ## IMPROVEMENT-DOC-007
 
 ```

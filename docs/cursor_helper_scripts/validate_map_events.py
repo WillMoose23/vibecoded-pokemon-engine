@@ -6,7 +6,10 @@ import json
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
+TOOLS_DIR = ROOT / "tools"
+if str(TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(TOOLS_DIR))
 MAPS_DIR = ROOT / "src" / "maps"
 MONSTER_JSON = ROOT / "src" / "monster.json"
 SKIP_NAMES = frozenset({"maps_index.json", "world_layout.json"})

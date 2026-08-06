@@ -9,6 +9,34 @@ The project has two parts:
 
 ---
 
+## Screenshots
+
+### Map editor — tile painting
+
+![Map editor tile painting mode](docs/images/screenshot-01.png)
+
+Paint tiles, layers, walkability, and connections in **Map editor 3.0** (`python3 tools/map_editor.py`).
+
+### Map editor — world layout
+
+![Map editor overworld workspace](docs/images/screenshot-02.png)
+
+Use the **#** world workspace to place maps, pan/zoom, and wire proximity connections between areas.
+
+### Event Engine — script editing
+
+![Event Engine script editor](docs/images/screenshot-03.png)
+
+Open **Event Engine** from the map editor toolbar to author NPC triggers, dialogue, and script opcodes.
+
+### Game — overworld
+
+![Game overworld with event dialogue](docs/images/screenshot-04.png)
+
+Run the C++ game (`make run`) to play maps and events authored in the editors.
+
+---
+
 ## System Requirements (macOS)
 
 - **macOS** 12 (Monterey) or later, Intel or Apple Silicon.
@@ -115,8 +143,8 @@ python3 tools/map_editor.py
 
 ```bash
 # Validate map/event data for consistency errors
-python3 tools/validate_maps.py
-python3 tools/validate_map_events.py
+python3 docs/cursor_helper_scripts/validate_maps.py
+python3 docs/cursor_helper_scripts/validate_map_events.py
 
 # Regenerate the script opcode list used by the editor (after changing src/op.cpp)
 make regen-event-ops
@@ -128,7 +156,8 @@ make regen-event-ops
 
 - `src/`, `include/` — C++ game engine source.
 - `Makefile` — build/run/test/clean targets for the game.
-- `tools/` — Python/pygame map & event editor and supporting scripts.
+- `tools/` — Python/pygame map & event editor and supporting modules (run `python3 tools/map_editor.py`).
+- `docs/cursor_helper_scripts/` — validators, opcode extract/audit, migrations, and Cursor workflow scripts.
 - `src/maps/` — map, tileset, and event script JSON data consumed by the game and edited by the tools.
 - `docs/` — source/tool documentation (`source_doc.md`, `tools_doc.md`), issue tracker (`tracker.md`), and script opcode reference (`event_script_ops.md`).
 - `tests/` — C++ and Python unit tests.

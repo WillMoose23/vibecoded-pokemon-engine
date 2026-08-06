@@ -41,9 +41,10 @@ TOOL: tools/map_editor.py
         FEATURE-MAP-099/100: collapsible tileset panel + NPC sprite editor modal (`npc_sprite_editor_modal`, launcher NPC Sprites row).
         FEATURE-MAP-103: `tile_layer_locked` parallel to tile layers; lock icon on layer chip and Settings list blocks paint/fill/eraser (editor-only, not in map JSON).
         FEATURE-MAP-104: Help tab **NPC Sprites** documents sprite editor; `npcSpriteEditor` config section for palette/defaultZoom.
+        BUG-MAP-106: `relayout()` records `_map_toolbar_left` (left edge of the Event/Overworld/Help/Settings cluster); `draw()` anchors `layer_chip_lock_btn` immediately left of it instead of `layer_chip_rect.right`, so the lock button no longer overlaps Settings.
         IMPROVEMENT-MAP-098: bottom footer pane removed; vertical space reclaimed for map/palette/tileset list. Map metadata shown in layer chip; transient status messages render as semi-transparent toast bar at the bottom of `map_viewport_rect`; inline prompts (map-id, connection) appear in the same toast overlay.
         REFACTOR-CPP-PY-001: module constant `_CONFIRM_DIALOG_YES_KEYS` (`Return`, `y`) is shared by layer-remove, tileset-delete, and map-delete confirm branches (numpad Enter intentionally not included there; `_ENTER_KEYS` still covers prompts that accept both Return keys).
-        FEATURE-MAP-WORLD-001 / BUG-MAP-WORLD-002 / FEATURE-MAP-WORLD-004 / FEATURE-MAP-WORLD-008: toolbar `#` toggles world workspace over the map canvas (thumbnails, pan/zoom, context menu, separate world undo/redo when the cursor is over the canvas). **World units are map tiles:** `widthPx`/`heightPx` on each node equal `mapWidthTiles`/`mapHeightTiles`; `world_cam_zoom` is pixels per world tile (default `8`). Legacy layouts where extents were `8 × tileCount` migrate on load (`WORLD_LEGACY_WORLD_PX_PER_TILE`); camera `x`/`y`/`zoom` rescale accordingly. Node origins snap to integer tile coords (`round` to nearest tile; BUG-MAP-WORLD-009) after add, paste, and drag release. Overlap fixup pushes by exactly the overlap amount (`eps=0`, BUG-MAP-WORLD-009) so adjacent (touching, sep=0) placement is allowed. Proximity **preview** lines include `sep == 0` (touching maps show a green connection); export graph also includes `sep == 0` via `build_proximity_edges`. `WORLD_PX_PER_MAP_TILE` applies only to thumbnail rasterization inside the palette-style thumb builder, not to world node size. Large-map thumbnails clamp per-tile draw size (`WORLD_THUMB_CELL_PX_MIN`) and omit dense cell grids when tiles would be sub-5 px. RMB menu toggles `interior` (overlap allowed); non-interior nodes are pushed to non-overlapping (touching allowed) while dragging. Proximity links (green) draw when AABB separation is within `WORLD_EDGE_SNAP_TILES` (including sep=0) (tile units; export `edgeSnapPx` uses the same). FEATURE-MAP-030: editor **3.0**; toolbar **E** opens popover (**NPC Events** | **Wild Encounters**). NPC Events: 2×2 anchors, scripts under `src/maps/scripts/`, sprites from `src/Graphics/Characters`, Pokemon Icons, Icons shiny. FEATURE-MAP-050 wild mode: `layers.wildEncounter` + `wildPatches[]` sidebar. Snapshot `tools/backup_map_editor_v3/`. Opcodes: `docs/event_script_ops.md`. Validate: `python3 tools/validate_map_events.py`. Version shown in pygame title. `src/maps/world_layout.json` is excluded from the open-map list, `maps_index.json`, and `refresh_map_file_list`.
+        FEATURE-MAP-WORLD-001 / BUG-MAP-WORLD-002 / FEATURE-MAP-WORLD-004 / FEATURE-MAP-WORLD-008: toolbar `#` toggles world workspace over the map canvas (thumbnails, pan/zoom, context menu, separate world undo/redo when the cursor is over the canvas). **World units are map tiles:** `widthPx`/`heightPx` on each node equal `mapWidthTiles`/`mapHeightTiles`; `world_cam_zoom` is pixels per world tile (default `8`). Legacy layouts where extents were `8 × tileCount` migrate on load (`WORLD_LEGACY_WORLD_PX_PER_TILE`); camera `x`/`y`/`zoom` rescale accordingly. Node origins snap to integer tile coords (`round` to nearest tile; BUG-MAP-WORLD-009) after add, paste, and drag release. Overlap fixup pushes by exactly the overlap amount (`eps=0`, BUG-MAP-WORLD-009) so adjacent (touching, sep=0) placement is allowed. Proximity **preview** lines include `sep == 0` (touching maps show a green connection); export graph also includes `sep == 0` via `build_proximity_edges`. `WORLD_PX_PER_MAP_TILE` applies only to thumbnail rasterization inside the palette-style thumb builder, not to world node size. Large-map thumbnails clamp per-tile draw size (`WORLD_THUMB_CELL_PX_MIN`) and omit dense cell grids when tiles would be sub-5 px. RMB menu toggles `interior` (overlap allowed); non-interior nodes are pushed to non-overlapping (touching allowed) while dragging. Proximity links (green) draw when AABB separation is within `WORLD_EDGE_SNAP_TILES` (including sep=0) (tile units; export `edgeSnapPx` uses the same). FEATURE-MAP-030: editor **3.0**; toolbar **E** opens popover (**NPC Events** | **Wild Encounters**). NPC Events: 2×2 anchors, scripts under `src/maps/scripts/`, sprites from `src/Graphics/Characters`, Pokemon Icons, Icons shiny. FEATURE-MAP-050 wild mode: `layers.wildEncounter` + `wildPatches[]` sidebar. Snapshot `tools/backup_map_editor_v3/`. Opcodes: `docs/event_script_ops.md`. Validate: `python3 docs/cursor_helper_scripts/validate_map_events.py`. Version shown in pygame title. `src/maps/world_layout.json` is excluded from the open-map list, `maps_index.json`, and `refresh_map_file_list`.
         FEATURE-MAP-041 / FEATURE-MAP-085 / IMPROVEMENT-MAP-094: **Help** toolbar button and **H** (`toggle_help`) open the modal help guide on a context-appropriate tab (`_help_default_tab_for_context`: Event Engine open → **Script Ops**; events/wild workspace or launcher → **Events**; otherwise **Contents**). **Settings** (gear) opens help directly on the **Settings** tab (layer add/remove, key rebinding; legacy `settings_open` overlay removed). Tabs: Contents, **Editing modes** (merged paint/walk/transparent/over-player), Map & exits, Events, World, Keys, Script Ops, Settings. Contents uses grouped TOC headings; number keys **1–7** jump to topics. Global **search** box below the tab bar filters all help body text; click a result to jump. Scroll with mouse wheel; Esc closes (clears search when the search box is focused).
         BUG-MAP-WORLD-007: world mode does not draw a fixed footer-hint string on the map canvas (panning no longer scrolls art under a static overlay); world shortcuts are documented in the help guide (**H**).
         IMPROVEMENT-MAP-036: in **walk** edit mode, hovering the map draws a semi-transparent cyan rectangle for the player **visual** footprint (`playerTilesW` / `playerTilesH`) and magenta outlines on the **collision** cells (`playerCollisionOffX` / `playerCollisionOffY` / `playerCollisionW` / `playerCollisionH`), loaded from `src/overworld_view.json` (same clamp rules as the game). Config is re-read when the JSON file modification time changes.
@@ -55,7 +56,7 @@ TOOL: tools/map_editor.py
         FEATURE-MAP-042: `MapEditor.relayout` moves the tileset filesystem pane to a bottom strip and expands map viewport width by removing the old side filesystem column. `layer_add` (default `L`) now opens a layer-manager popup with add/delete, rename, vertical drag reorder, and per-layer over-player applicability toggles.
         IMPROVEMENT-MAP-042: map save now writes optional `layers.tileLayers[].applyOverPlayer` booleans (default true). Runtime map/world viewers treat layers with this flag off as always below-player, even when the `layers.overPlayer` grid marks the tile.
         FEATURE-MAP-043: Events workspace lists **Edit script (modal)** next to **Open script JSON**. The modal edits ordered steps (add, save, close, RMB context menu for every opcode in `tools/event_script_schema.py`, drag reorder, Ctrl+C / Ctrl+V). Saved files use `map`, `version`, `script_1` (array of one-key objects), and `script_2: []`; legacy `actions` arrays are still loaded by the game when `script_1` yields no steps. **IMPROVEMENT-MAP-051**: **H** (`toggle_help`) opens context-appropriate help: script modal → **Script opcodes**; NPC Events or Wild Encounters workspace → updated **Events** tab; otherwise **Contents**. **FEATURE-MAP-053**: Wild Encounters tier editor opens a species modal (search, ★ favorites in `wildEncounterEditor.favoriteSpecies`); LMB row or **+ row**; favorites sort first.
-        FEATURE-MAP-044 / FEATURE-MAP-048 / FEATURE-MAP-049: Script modal uses **three columns** when the doc pane is on (steps | opcode palette | structured documentation from `tools/event_script_opcode_docs.py`). Footer **Sprite** opens the sprite picker docked in the modal (**BUG-MAP-028**: list clicks and wheel over the docked picker are handled inside the modal so rows scroll and select). **gear** popover toggles the doc pane, persists size, and sets opcode palette sort (**source** / **alpha** / **category** using `category` + `required_params` in `tools/event_script_op_meta.json`). Bottom-right **resize grip** adjusts `panelWidth` and `panelBodyHeight` (persisted under `eventScriptEditor`). Wheel scrolls hovered column; **IMPROVEMENT-MAP-044**: opcode insert uses **LMB drag after a small movement threshold** (same px constant as tileset list drags); a **click** (below threshold) **pins** the right-hand documentation pane to that opcode until you select a script step or pick another opcode. Opcode order from **`tools/event_script_ops_generated.py`** (`python3 tools/extract_map_script_ops.py`). **IMPROVEMENT-MAP-043**: `event_script_opcode_docs._wrap_words` preserves leading indentation for wrapped prose. **IMPROVEMENT-MAP-045**: Function and Example JSON in docs use `indent=4` and are not word-wrapped. **BUG-MAP-029**: Enter and character-frame picking work while the script modal is open (`_event_script_modal_keydown` and earlier `MOUSEBUTTONDOWN` routing). **FEATURE-MAP-050**: sprite picker shows a **preview pane** to the right of the filename list (`_events_sprite_pick_list_and_preview_rects`, `_events_sprite_pick_selection_preview_surface`). **IMPROVEMENT-MAP-046** / **BUG-MAP-031** / **BUG-MAP-032**: NPC **4×4 frame** overlay fits title (wrapped with `_wrap_lines_to_width`), scaled sheet, and facing bar; horizontal budget from `min(map_viewport_rect.w, window)`, vertical from `map_canvas_rect.h`, center on `map_canvas_rect` with `top_bound = max(margin, canvas.y)`, sheet inner aligned to `title_block_h` (`_draw_events_character_frame_overlay`). **IMPROVEMENT-MAP-047**: long **Script opcodes** help lines and script-modal doc lines are split to the panel pixel width before `Font.render` (`_expand_help_overlay_segments`, `_expand_visual_text_lines`). **BUG-MAP-030**: `event_script_opcode_docs.build_structured_doc_lines` subtracts the pixel width of a two-space prefix from `_wrap_words` budgets for description and parameter rows so wrapped lines are not a few pixels too wide.
+        FEATURE-MAP-044 / FEATURE-MAP-048 / FEATURE-MAP-049: Script modal uses **three columns** when the doc pane is on (steps | opcode palette | structured documentation from `tools/event_script_opcode_docs.py`). Footer **Sprite** opens the sprite picker docked in the modal (**BUG-MAP-028**: list clicks and wheel over the docked picker are handled inside the modal so rows scroll and select). **gear** popover toggles the doc pane, persists size, and sets opcode palette sort (**source** / **alpha** / **category** using `category` + `required_params` in `tools/event_script_op_meta.json`). Bottom-right **resize grip** adjusts `panelWidth` and `panelBodyHeight` (persisted under `eventScriptEditor`). Wheel scrolls hovered column; **IMPROVEMENT-MAP-044**: opcode insert uses **LMB drag after a small movement threshold** (same px constant as tileset list drags); a **click** (below threshold) **pins** the right-hand documentation pane to that opcode until you select a script step or pick another opcode. Opcode order from **`tools/event_script_ops_generated.py`** (`python3 docs/cursor_helper_scripts/extract_map_script_ops.py`). **IMPROVEMENT-MAP-043**: `event_script_opcode_docs._wrap_words` preserves leading indentation for wrapped prose. **IMPROVEMENT-MAP-045**: Function and Example JSON in docs use `indent=4` and are not word-wrapped. **BUG-MAP-029**: Enter and character-frame picking work while the script modal is open (`_event_script_modal_keydown` and earlier `MOUSEBUTTONDOWN` routing). **FEATURE-MAP-050**: sprite picker shows a **preview pane** to the right of the filename list (`_events_sprite_pick_list_and_preview_rects`, `_events_sprite_pick_selection_preview_surface`). **IMPROVEMENT-MAP-046** / **BUG-MAP-031** / **BUG-MAP-032**: NPC **4×4 frame** overlay fits title (wrapped with `_wrap_lines_to_width`), scaled sheet, and facing bar; horizontal budget from `min(map_viewport_rect.w, window)`, vertical from `map_canvas_rect.h`, center on `map_canvas_rect` with `top_bound = max(margin, canvas.y)`, sheet inner aligned to `title_block_h` (`_draw_events_character_frame_overlay`). **IMPROVEMENT-MAP-047**: long **Script opcodes** help lines and script-modal doc lines are split to the panel pixel width before `Font.render` (`_expand_help_overlay_segments`, `_expand_visual_text_lines`). **BUG-MAP-030**: `event_script_opcode_docs.build_structured_doc_lines` subtracts the pixel width of a two-space prefix from `_wrap_words` budgets for description and parameter rows so wrapped lines are not a few pixels too wide.
         FEATURE-MAP-046: Script modal **RMB** opens a **nested, configurable** context menu (cascade flyouts from `tools/event_script_ctx_menu.py`; JSON under `tools/map_editor_config.json` → `eventScriptEditor.contextMenu`; invalid config falls back to defaults). While the modal is open, **global map shortcuts do not run** except **H** (help) and resize **MOUSEMOTION** updates; **Esc** closes the context menu, then the settings popover, then the modal. Unit tests: `python3 -m unittest discover tests -v` (see `tests/test_event_script_ctx_menu.py`).
         FEATURE-MAP-083: `modal_text.py` FORM_* constants (`FORM_LABEL_COL_W`, `FORM_FIELD_H_PAD`, `FORM_HELP_GAP`, `FORM_ROW_GAP`, `FORM_SECTION_TOP`) and helpers (`form_field_h`, `form_field_x`, `form_field_w`, `form_label_x/y`, `form_help_y`, `form_row_advance`) are used by `event_action_modal.py` (horizontal label+field layout), `event_trigger_modal.py` (field heights + row gaps), `flag_registry_modal.py` (list row field heights), `audio_engine_modal.py`, and `battle_editor_modal.py`.
         FEATURE-MAP-087: `_map_music_track` (str) is loaded from `musicTrack` in `try_load_map_by_id`, persisted in `_write_map_json_to_disk` (only written when non-empty), and included in `_snapshot_session_map_bundle` / `_restore_session_map_bundle` under key `"music_track"`. `read_map_music_track(map_id)` and `write_map_music_track(map_id, track)` expose it to `AudioEngineModal`.
@@ -90,22 +91,22 @@ TOOL: tools/map_editor.py
     SIDE EFFECTS:
         Applies edits, checkpoints undo/redo, triggers file save/load/import actions.
 
-TOOL: tools/audit_event_script_ops.py
+TOOL: docs/cursor_helper_scripts/audit_event_script_ops.py
 
     PURPOSE:
         IMPROVEMENT-MAP-052: verify event script opcode parity across `tools/event_script_op_meta.json`, `src/op.cpp`, and `Game::tryMapViewerScriptOpcode_` in `src/map_view.cpp` (plus `onWarp` / `onFacingHint` wiring).
 
     USAGE:
-        python3 tools/audit_event_script_ops.py
+        python3 docs/cursor_helper_scripts/audit_event_script_ops.py
 
     INPUT:
-        `src/op.cpp`, `src/map_view.cpp`, `tools/event_script_op_meta.json`; runs `tools/extract_map_script_ops.py` first.
+        `src/op.cpp`, `src/map_view.cpp`, `tools/event_script_op_meta.json`; runs `docs/cursor_helper_scripts/extract_map_script_ops.py` first.
 
     OUTPUT:
         Prints `audit_event_script_ops: OK` on success; stderr errors and exit 1 on mismatch.
 
     DEPENDENCIES:
-        Python 3 standard library, `tools/extract_map_script_ops.py`
+        Python 3 standard library, `docs/cursor_helper_scripts/extract_map_script_ops.py`
 
     SIDE EFFECTS:
         Regenerates `tools/event_script_ops_generated.py` via subprocess when extract runs.
@@ -273,6 +274,8 @@ TOOL: tools/npc_sprite_sheet_helpers.py
     NOTES:
         Default sheet 128×192 (32×48 cells). FEATURE-MAP-102: `flood_fill_surface`,
         `composite_rgba_layers`, `parse_palette_from_config`, `DEFAULT_NPC_PALETTE`.
+        FEATURE-MAP-109: `normalize_pixel_rect(x0, y0, x1, y1, max_w, max_h)` orders and
+        clamps a drag-selected rectangle for the rectangular marquee selection tool.
         Tests: `tests/test_npc_sprite_sheet_helpers.py`.
 
 TOOL: tools/npc_sprite_editor_modal.py
@@ -285,8 +288,9 @@ TOOL: tools/npc_sprite_editor_modal.py
         Opened from Events launcher → NPC Sprites. Back returns to launcher.
 
     INPUT:
-        Mouse (paint/erase, direction/frame tabs, palette), keyboard (Save As filename, Ctrl+Z/Y,
-        dimension fields), wheel (zoom on canvas).
+        Mouse (paint/erase/fill/select, direction/frame tabs, palette, sprite search list),
+        keyboard (Save As filename, P/E/F/S tools, Z/R undo-redo, Ctrl+S/Shift+S/C/V,
+        dimension fields, sprite search text), wheel (zoom on canvas, scroll layer/sprite lists).
 
     OUTPUT:
         PNG files under Characters/; on-screen preview with optional reference sheet pane.
@@ -301,24 +305,38 @@ TOOL: tools/npc_sprite_editor_modal.py
         Writes PNG to disk on Save / Save As.
 
     ERROR HANDLING:
-        Status messages for invalid dimensions, missing files, save failures.
+        Status messages for invalid dimensions, missing files, save failures, empty
+        clipboard/selection on copy or paste, locked-layer paste.
 
     NOTES:
         BUG-MAP-101: canvas aspect-correct; per-axis _cell_step_x/y hit-test.
+        BUG-MAP-105: reference label moved below the reference picture (was drawn in the
+        gap above the canvas, which could overlap the toolbar row on narrow panels).
         FEATURE-MAP-102: left rail (P/E/F tools, RGBA sliders, layers with eye/lock/rename),
-        composite visible layers on save, flood fill, zoom default 8, matched ref canvas.
+        composite visible layers on save, flood fill, matched ref canvas.
         FEATURE-MAP-104: Help button → npc_sprites tab; Edit Swatches → config palette.
+        FEATURE-MAP-106: default zoom 12 (was 8); `_footer_start_y()` computes the
+        palette/dims/file row position, tracking canvas/reference height as zoom changes.
+        FEATURE-MAP-107: reference name renders below the picture in yellow; "Grid" button
+        in the reference box's top-right corner toggles a pixel grid overlay (`_ref_grid_on`).
+        FEATURE-MAP-108: collapsible sprite search panel (`_sprite_panel_collapsed`,
+        `_filtered_sprite_names()`) left of the tool rail; picks the reference image.
+        FEATURE-MAP-109: Select (S) tool — rectangular marquee (`_selection_rect`);
+        Ctrl+C/Ctrl+V copy/paste via `_copy_selection()`/`_paste_clipboard()` and an
+        in-memory `_clipboard` surface.
+        FEATURE-MAP-110: plain Z/R undo/redo (replacing Ctrl+Z/Ctrl+Y); Ctrl+S save,
+        Ctrl+Shift+S save as, Ctrl+C copy, Ctrl+V paste.
         Mirror-lock (default on) copies Left row to mirrored Right row on active layer.
         Walk helpers: Idle→F3, Dup prev. Non-128×192 warns via sheet_dimensions_warning.
         Tests: `tests/test_npc_sprite_editor_modal.py`, `tests/test_npc_sprite_sheet_helpers.py`.
 
-TOOL: tools/validate_map_events.py
+TOOL: docs/cursor_helper_scripts/validate_map_events.py
 
     PURPOSE:
         FEATURE-MAP-030 / FEATURE-MAP-043 / FEATURE-MAP-050: validate map JSON `events[]` (2×2 anchors in bounds, non-overlapping, script `path` files exist and parse as JSON) and wild data (`wildPatches`, `layers.wildEncounter` dimensions and indices, species keys vs `src/monster.json`, positive weights, at least one encounter row per patch). Warns when a script file has no non-empty `script_1` or `actions`, or when a wild patch has zero painted tiles. Validates optional `sprite.facing` for `kind: character` (FEATURE-MAP-049). FEATURE-MAP-068: reports unbalanced control-flow blocks (`if_flag`/`end_if`, `repeat`/`end_repeat`) as errors via `event_script_schema.validate_balanced`. FEATURE-MAP-074/075/076/078: `_script_block_error` checks balancing across the main flow and all in-file subflows (incl. `if_var`/`end_if_var`, `region`/`end_region`); `_script_reference_errors` validates `goto` targets (label in same flow) and `call_subflow` references (in-file subflow or existing `_library/<name>.json`, `LIBRARY_DIR`); `_validate_event_trigger` validates `trigger.type` (`TRIGGER_TYPES`), `trigger.condition`, `clearedFlag`, and `onComplete.setFlags`/`clearFlags`.
 
     USAGE:
-        python3 tools/validate_map_events.py
+        python3 docs/cursor_helper_scripts/validate_map_events.py
 
     INPUT:
         `src/maps/*.json` (skips `maps_index.json`, `world_layout.json`)
@@ -353,7 +371,7 @@ TOOL: tools/event_script_schema.py
         `read_steps_from_path` returns a default `show_message` step when the file is missing or invalid JSON.
 
     NOTES:
-        FEATURE-MAP-044: loads sibling **`event_script_ops_generated.py`** (`CPP_SCRIPT_OPS_ORDERED`) and merges **`event_script_op_meta.json`** into `EVENT_ACTION_DEFS`; exposes `op_documentation(op)` (label, description, status, default args, args help, **category**, **required_params**) for UI and `event_action_defs_with_palette_sort(mode)` for palette ordering. Missing generated file or meta/C++ mismatch surfaces at import or when running `tools/extract_map_script_ops.py`.
+        FEATURE-MAP-044: loads sibling **`event_script_ops_generated.py`** (`CPP_SCRIPT_OPS_ORDERED`) and merges **`event_script_op_meta.json`** into `EVENT_ACTION_DEFS`; exposes `op_documentation(op)` (label, description, status, default args, args help, **category**, **required_params**) for UI and `event_action_defs_with_palette_sort(mode)` for palette ordering. Missing generated file or meta/C++ mismatch surfaces at import or when running `docs/cursor_helper_scripts/extract_map_script_ops.py`.
         FEATURE-MAP-068: control-flow helpers for the block editor — `op_category`, `op_block_role`/`op_block_end`/`is_block_open`/`is_block_close`, `validate_balanced(steps)`, and the nested `steps_to_tree(steps)` / `tree_to_steps(tree)` converters (terminator markers are implicit in the tree; `args.skip` is never written from Python — the C++ engine stamps it on load). `validate_balanced` and the block roles cover the FEATURE-MAP-076/077 pairs `region`/`end_region` and `if_var`/`end_if_var`.
         FEATURE-MAP-074/075: multi-flow helpers — `document_to_flows(doc)` / `flows_to_document(flows, map_id)` (main flow in `script_1`, named subflows under `subflows`), `read_flows_from_path` / `write_flows_to_path`, and `labels_in_steps(steps)` (ordered, de-duplicated label names for the goto dropdown).
         FEATURE-MAP-081: `sort_palette_ops_in_category(ops)` — reorders ops so block openers
@@ -362,7 +380,7 @@ TOOL: tools/event_script_schema.py
         sorted stem names for the call_subflow picker.
         FEATURE-MAP-096: migration helpers — `TRIGGER_TYPES`, `default_event_trigger()`,
         `trigger_from_legacy_interaction()`, `normalize_map_event(ev)`, `migrate_script_document(doc, map_id)`,
-        and `script_documents_equal(a, b)` for `tools/migrate_map_events.py`.
+        and `script_documents_equal(a, b)` for `docs/cursor_helper_scripts/migrate_map_events.py`.
 
 TOOL: docs/cursor_helper_scripts/sync_cursor_plans.py
 
@@ -448,16 +466,16 @@ TOOL: docs/cursor_helper_scripts/sync_cursor_backup.py
     NOTES:
         Required by Git-Push-Development-Rule before push to `development`.
 
-TOOL: tools/migrate_map_events.py
+TOOL: docs/cursor_helper_scripts/migrate_map_events.py
 
     PURPOSE:
         FEATURE-MAP-096 Phase 1: one-time migration of map JSON `events[]` and linked script files
         to the canonical shape used by the Event Engine rebuild (`trigger` objects, `script_1` arrays).
 
     USAGE:
-        Dry-run (default): `python3 tools/migrate_map_events.py`
-        Apply changes: `python3 tools/migrate_map_events.py --write`
-        Custom maps dir: `python3 tools/migrate_map_events.py --maps-dir path/to/maps`
+        Dry-run (default): `python3 docs/cursor_helper_scripts/migrate_map_events.py`
+        Apply changes: `python3 docs/cursor_helper_scripts/migrate_map_events.py --write`
+        Custom maps dir: `python3 docs/cursor_helper_scripts/migrate_map_events.py --maps-dir path/to/maps`
 
     INPUT:
         Map JSON files under `src/maps/` (skips `maps_index.json`, `world_layout.json`); script paths
@@ -478,7 +496,7 @@ TOOL: tools/migrate_map_events.py
 
     NOTES:
         Does not fix validator content errors (e.g. missing library subflow references). Run
-        `python3 tools/validate_map_events.py` after migration. Phase 6 of the rebuild plan runs
+        `python3 docs/cursor_helper_scripts/validate_map_events.py` after migration. Phase 6 of the rebuild plan runs
         `--write` on the repo maps after backup.
 
 TOOL: tools/event_script_opcode_docs.py
@@ -540,13 +558,13 @@ TOOL: tools/event_script_ctx_menu.py
         Depth and node count capped (`MAX_DEPTH`, `MAX_NODES`). Event ids: `ev:rename`, `ev:view`, etc.
         Block ids: `step:delete`, `blk:editmodal`, `blk:doc`, `add:<op>`, etc. Human-readable schema: `docs/event_script_ops.md`.
 
-TOOL: tools/extract_map_script_ops.py
+TOOL: docs/cursor_helper_scripts/extract_map_script_ops.py
 
     PURPOSE:
         FEATURE-MAP-044 / FEATURE-MAP-048 / FEATURE-MAP-049: parse `src/op.cpp` for `if (op == "...")` opcode strings in first-seen order and emit `tools/event_script_ops_generated.py`; verify `tools/event_script_op_meta.json` defines the same op keys bidirectionally (meta may add `category`, `required_params`, and opcode doc fields not parsed by this script).
 
     USAGE:
-        python3 tools/extract_map_script_ops.py
+        python3 docs/cursor_helper_scripts/extract_map_script_ops.py
 
     INPUT:
         - `src/op.cpp`
@@ -570,10 +588,10 @@ TOOL: tools/extract_map_script_ops.py
 TOOL: tools/event_script_ops_generated.py
 
     PURPOSE:
-        Generated Python module exposing `CPP_SCRIPT_OPS_ORDERED` (opcode strings in C++ dispatch order). Produced exclusively by `tools/extract_map_script_ops.py`.
+        Generated Python module exposing `CPP_SCRIPT_OPS_ORDERED` (opcode strings in C++ dispatch order). Produced exclusively by `docs/cursor_helper_scripts/extract_map_script_ops.py`.
 
     USAGE:
-        Regenerate with `python3 tools/extract_map_script_ops.py` from the repository root; do not hand-edit except via the extractor.
+        Regenerate with `python3 docs/cursor_helper_scripts/extract_map_script_ops.py` from the repository root; do not hand-edit except via the extractor.
 
     INPUT:
         None directly; reflects the last successful extractor run over `src/op.cpp` and `tools/event_script_op_meta.json`.
@@ -673,13 +691,13 @@ TOOL: build/app
             - composite_bounds
             - copy_nodes_for_export
 
-TOOL: tools/validate_maps.py
+TOOL: docs/cursor_helper_scripts/validate_maps.py
 
     PURPOSE:
         Validates map and tileset JSON schemas and regenerates maps index.
 
     USAGE:
-        python3 tools/validate_maps.py
+        python3 docs/cursor_helper_scripts/validate_maps.py
 
     INPUT:
             - src/tilesets.json
@@ -730,13 +748,13 @@ TOOL: tools/validate_maps.py
     SIDE EFFECTS:
         Terminates process execution.
 
-TOOL: tools/migrate_monster_to_nested_forms.py
+TOOL: docs/cursor_helper_scripts/migrate_monster_to_nested_forms.py
 
     PURPOSE:
         Migrates flattened Pokemon keys in monster.json into nested per-species entries with standardized alternate form fields.
 
     USAGE:
-        python3 tools/migrate_monster_to_nested_forms.py
+        python3 docs/cursor_helper_scripts/migrate_monster_to_nested_forms.py
 
     INPUT:
             - src/monster.json
@@ -786,23 +804,23 @@ TOOL: tools/migrate_monster_to_nested_forms.py
     SIDE EFFECTS:
         None (pure transform for provided inputs).
 
-TOOL: tools/sync_pokemon_from_graphics.py
+TOOL: docs/cursor_helper_scripts/sync_pokemon_from_graphics.py
 
     PURPOSE:
         Synchronizes Pokemon species data from sprite folders and PokeAPI, then rewrites Pokemon section of monster.json using nested forms.
 
     USAGE:
-        python3 tools/sync_pokemon_from_graphics.py
+        python3 docs/cursor_helper_scripts/sync_pokemon_from_graphics.py
 
     INPUT:
             - src/Graphics/Pokemon/Front/*
             - src/Graphics/Pokemon/Back/*
             - src/monster.json (for MoveCatalog preservation)
-            - tools/.pokeapi_cache.json (optional cache)
+            - docs/cursor_helper_scripts/.pokeapi_cache.json (optional cache)
 
     OUTPUT:
             - Updated src/monster.json Pokemon section
-            - Updated tools/.pokeapi_cache.json cache entries
+            - Updated docs/cursor_helper_scripts/.pokeapi_cache.json cache entries
             - Progress/warning logs
 
     DEPENDENCIES:
