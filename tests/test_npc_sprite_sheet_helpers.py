@@ -57,5 +57,30 @@ class TestNpcSpriteSheetHelpers(unittest.TestCase):
         self.assertEqual(out.get_at((0, 0)), (255, 0, 0, 255))
 
 
+class TestNormalizePixelRect(unittest.TestCase):
+    """FEATURE-MAP-109: normalize_pixel_rect ordering/clamping for the marquee selection tool."""
+
+    def test_already_ordered(self) -> None:
+        from npc_sprite_sheet_helpers import normalize_pixel_rect
+
+        self.assertEqual(normalize_pixel_rect(1, 1, 5, 5, 32, 48), (1, 1, 5, 5))
+
+    def test_swaps_reversed_corners(self) -> None:
+        from npc_sprite_sheet_helpers import normalize_pixel_rect
+
+        self.assertEqual(normalize_pixel_rect(5, 5, 1, 1, 32, 48), (1, 1, 5, 5))
+        self.assertEqual(normalize_pixel_rect(1, 5, 5, 1, 32, 48), (1, 1, 5, 5))
+
+    def test_clamps_to_bounds(self) -> None:
+        from npc_sprite_sheet_helpers import normalize_pixel_rect
+
+        self.assertEqual(normalize_pixel_rect(-5, -5, 999, 999, 32, 48), (0, 0, 31, 47))
+
+    def test_single_pixel_selection(self) -> None:
+        from npc_sprite_sheet_helpers import normalize_pixel_rect
+
+        self.assertEqual(normalize_pixel_rect(3, 4, 3, 4, 32, 48), (3, 4, 3, 4))
+
+
 if __name__ == "__main__":
     unittest.main()
