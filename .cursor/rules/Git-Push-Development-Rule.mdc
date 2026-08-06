@@ -34,7 +34,7 @@ Pair with **Git-Pull-Sync-Rule** when they ask to sync both directions.
    ```
 4. **Cursor plans & skills** — sync into the repo before push:
    ```bash
-   python3 tools/sync_cursor_backup.py
+   python3 docs/cursor_helper_scripts/sync_cursor_backup.py
    ```
    Commit changes under `.cursor/plans/` and `.cursor/skills/`.
 5. **No secrets** — never stage `.env`, tokens, or ignored caches (see `.gitignore`).

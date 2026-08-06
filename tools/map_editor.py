@@ -102,6 +102,7 @@ except ImportError:
     sys.exit(1)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import modal_text as mtext
 from audio_engine_modal import AudioEngineModal
 from battle_editor_modal import BattleEditorModal
 from event_action_modal import EventActionModal
@@ -193,6 +194,7 @@ HELP_GUIDE_TABS: tuple[tuple[str, str], ...] = (
     ("editing_modes", "Editing modes"),
     ("map_meta", "Map & exits"),
     ("events", "Events"),
+    ("npc_sprites", "NPC Sprites"),
     ("world", "World"),
     ("keys", "Keys"),
     ("script_ops", "Script Ops"),
@@ -203,6 +205,7 @@ HELP_HOME_JUMP_TABS: tuple[str, ...] = (
     "editing_modes",
     "map_meta",
     "events",
+    "npc_sprites",
     "world",
     "keys",
     "script_ops",
@@ -747,6 +750,7 @@ class MapEditor:
         self.spacing = 0
         self.tile_layers: list[list[list[dict | None]]] = []
         self.tile_layer_ids: list[str] = []
+        self.tile_layer_locked: list[bool] = []
         self.active_layer_index = 0
         self.layer_remove_confirm_idx: int | None = None
         self.walk: list[list[int]] = []
@@ -767,10 +771,12 @@ class MapEditor:
         self.gear_rect = pygame.Rect(0, 0, 32, 32)
         self.world_btn_rect = pygame.Rect(0, 0, 32, 32)
         self.layer_chip_rect = pygame.Rect(0, 0, 1, 1)
+        self.layer_chip_lock_btn = pygame.Rect(0, 0, 1, 1)
         self.map_canvas_rect = pygame.Rect(0, 0, 1, 1)
         self.settings_add_event_rect = pygame.Rect(0, 0, 1, 1)
         self.settings_remove_event_rect = pygame.Rect(0, 0, 1, 1)
         self.settings_remove_current_layer_rect = pygame.Rect(0, 0, 1, 1)  # FEATURE-MAP-019
+        self._settings_tile_layer_row_rects: list[tuple[int, pygame.Rect, pygame.Rect]] = []
         self.palette_sel_h = self.font.get_linesize() + 6
         self.map_origin_x = 0
         self.map_origin_y = 0
@@ -2057,6 +2063,7 @@ class MapEditor:
         return {
             "tile_layers": copy.deepcopy(self.tile_layers),
             "tile_layer_ids": list(self.tile_layer_ids),
+            "tile_layer_locked": list(self.tile_layer_locked),
             "walk": [row[:] for row in self.walk],
             "trans": [row[:] for row in self.trans],
             "over_player": [row[:] for row in self.over_player],
@@ -2066,6 +2073,11 @@ class MapEditor:
     def _restore_map_state(self, s: dict) -> None:
         self.tile_layers = copy.deepcopy(s["tile_layers"])
         self.tile_layer_ids = list(s["tile_layer_ids"])
+        raw_locked = s.get("tile_layer_locked")
+        if isinstance(raw_locked, list) and len(raw_locked) == len(self.tile_layers):
+            self.tile_layer_locked = [bool(x) for x in raw_locked]
+        else:
+            self.tile_layer_locked = [False] * len(self.tile_layers)
         self.walk = [row[:] for row in s["walk"]]
         self.trans = [row[:] for row in s["trans"]]
         raw_over = s.get("over_player")
@@ -2737,7 +2749,15 @@ class MapEditor:
         w, h = self.map_w, self.map_h
         self.tile_layers = [[[None for _ in range(w)] for _ in range(h)]]
         self.tile_layer_ids = ["ground"]
+        self.tile_layer_locked = [False]
         self.active_layer_index = 0
+
+    def _active_layer_locked(self) -> bool:
+        if not self.tile_layer_locked:
+            return False
+        if self.active_layer_index >= len(self.tile_layer_locked):
+            return False
+        return bool(self.tile_layer_locked[self.active_layer_index])
 
     def _alloc_layers(self) -> None:
         self._alloc_walk_trans()
@@ -2769,6 +2789,7 @@ class MapEditor:
         nw, nh = max(1, min(MAP_SIZE_MAX, nw)), max(1, min(MAP_SIZE_MAX, nh))
         old_tls = self.tile_layers
         old_ids = list(self.tile_layer_ids)
+        old_locked = list(self.tile_layer_locked)
         old_ai = self.active_layer_index
         old_w = self.walk
         old_t = self.trans
@@ -2789,6 +2810,9 @@ class MapEditor:
             self.tile_layer_ids = old_ids[: len(self.tile_layers)]
             while len(self.tile_layer_ids) < len(self.tile_layers):
                 self.tile_layer_ids.append(self._unique_layer_id())
+            self.tile_layer_locked = old_locked[: len(self.tile_layers)]
+            while len(self.tile_layer_locked) < len(self.tile_layers):
+                self.tile_layer_locked.append(False)
             self.active_layer_index = min(max(0, old_ai), len(self.tile_layers) - 1)
         for y in range(min(nh, len(old_w))):
             for x in range(min(nw, len(old_w[y]))):
@@ -3000,6 +3024,7 @@ class MapEditor:
         self._alloc_walk_trans()
         self.tile_layers = []
         self.tile_layer_ids = []
+        self.tile_layer_locked = []
         self.active_layer_index = 0
         tls = layers.get("tileLayers")
         if isinstance(tls, list) and len(tls) > 0:
@@ -3038,6 +3063,7 @@ class MapEditor:
                                 }
                 self.tile_layers.append(grid)
                 self.tile_layer_ids.append(lid)
+                self.tile_layer_locked.append(False)
             if not self.tile_layers:
                 self._reset_tile_layers_single()
             else:
@@ -4111,6 +4137,7 @@ class MapEditor:
         empty = [[None for _ in range(w)] for _ in range(h)]
         self.tile_layers.append(empty)
         self.tile_layer_ids.append("event")
+        self.tile_layer_locked.append(False)
         self.active_layer_index = len(self.tile_layers) - 1
         self.set_status("Added event layer.", kind="ok")
 
@@ -4421,14 +4448,34 @@ class MapEditor:
         chip_bg = (78, 52, 102) if ev_layer else (38, 88, 72)
         pygame.draw.rect(self.screen, chip_bg, self.layer_chip_rect)
         pygame.draw.rect(self.screen, (120, 120, 140), self.layer_chip_rect, 1)
-        chip_txt = (
-            f"{self.map_id} \u00b7 {self.map_w}\u00d7{self.map_h} \u00b7 "
-            f"EDITING: {ln_chip.upper()}   "
-            f"(layers {self.key_primary('layer_prev')}/{self.key_primary('layer_next')})"
+        lock_w = 30
+        self.layer_chip_lock_btn = pygame.Rect(
+            self.layer_chip_rect.right - lock_w - 6,
+            self.layer_chip_rect.y + 4,
+            lock_w,
+            self.layer_chip_rect.h - 8,
+        )
+        locked = self._active_layer_locked()
+        chip_avail = max(40, self.layer_chip_lock_btn.x - self.layer_chip_rect.x - 12)
+        chip_txt = mtext.truncate_to_width(
+            self.font_small,
+            (
+                f"{self.map_id} \u00b7 {self.map_w}\u00d7{self.map_h} \u00b7 "
+                f"EDITING: {ln_chip.upper()}   "
+                f"(layers {self.key_primary('layer_prev')}/{self.key_primary('layer_next')})"
+            ),
+            chip_avail,
         )
         self.screen.blit(
             self.font_small.render(chip_txt, True, (248, 248, 252)),
             (self.layer_chip_rect.x + 8, self.layer_chip_rect.y + 7),
+        )
+        pygame.draw.rect(self.screen, (55, 60, 72), self.layer_chip_lock_btn)
+        pygame.draw.rect(self.screen, (140, 150, 170), self.layer_chip_lock_btn, 1)
+        lock_txt = "🔒" if locked else "🔓"
+        self.screen.blit(
+            self.font_small.render(lock_txt, True, (240, 240, 248)),
+            (self.layer_chip_lock_btn.x + 6, self.layer_chip_lock_btn.y + 4),
         )
         pygame.draw.rect(self.screen, (90, 90, 110), self.events_btn_rect, 1)
         if (
@@ -4749,6 +4796,22 @@ class MapEditor:
             (self.settings_remove_current_layer_rect.x + 10, self.settings_remove_current_layer_rect.y + 22),
         )
         y += 52
+        self.screen.blit(fs.render("Tile layers", True, (190, 200, 220)), (content.x + 6, y))
+        y += 18
+        self._settings_tile_layer_row_rects = []
+        row_h = lh + 4
+        for li, lid in enumerate(self.tile_layer_ids):
+            row = pygame.Rect(content.x + 6, y, content.w - 12, row_h)
+            lock = pygame.Rect(row.right - 24, row.y + 2, 20, row_h - 4)
+            if li == self.active_layer_index:
+                pygame.draw.rect(self.screen, (42, 58, 48), row)
+            lbl = mtext.truncate_to_width(fs, lid, row.w - 36)
+            lock_on = li < len(self.tile_layer_locked) and self.tile_layer_locked[li]
+            self.screen.blit(fs.render(lbl, True, (220, 225, 235)), (row.x + 8, row.y + 2))
+            self.screen.blit(fs.render("🔒" if lock_on else "🔓", True, (200, 205, 215)), (lock.x + 2, lock.y + 1))
+            self._settings_tile_layer_row_rects.append((li, row, lock))
+            y += row_h + 2
+        y += 8
         self.screen.blit(
             fs.render("Event Engine", True, (190, 200, 220)),
             (content.x + 6, y),
@@ -4801,6 +4864,14 @@ class MapEditor:
                 self.layer_remove_confirm_idx = self.active_layer_index
                 self._close_help_overlay()
             return True
+        for li, row, lock in getattr(self, "_settings_tile_layer_row_rects", []):
+            if lock.collidepoint(mx, my):
+                if li < len(self.tile_layer_locked):
+                    self.tile_layer_locked[li] = not self.tile_layer_locked[li]
+                return True
+            if row.collidepoint(mx, my):
+                self.active_layer_index = li
+                return True
         if self.settings_ee_follow_main_rect.collidepoint(mx, my):
             sec = self.config_get_section("eventEngine")
             sec["selectSwitchesMainMap"] = not bool(sec.get("selectSwitchesMainMap", False))
@@ -5154,6 +5225,9 @@ class MapEditor:
         When brush_origin is set, each painted cell uses the tiled multi-tile brush (not only [0][0]).
         Returns count of cells written to fill (0 if no-op).
         """
+        if self._active_layer_locked():
+            self.set_status("Layer locked.", kind="info")
+            return 0
         g = self._active_grid()
         ref = match_grid if match_grid is not None else g
         if not (0 <= sx < self.map_w and 0 <= sy < self.map_h):
@@ -5258,6 +5332,9 @@ class MapEditor:
             self.set_status("Deleted map; started new empty map", kind="ok")
 
     def apply_brush_at(self, cx: int, cy: int, erase: bool) -> None:
+        if self._active_layer_locked():
+            self.set_status("Layer locked.", kind="info")
+            return
         bh = len(self.brush_pattern)
         bw = len(self.brush_pattern[0]) if bh else 1
         for j in range(bh):
@@ -5273,6 +5350,9 @@ class MapEditor:
                     g[ty][tx] = {"ts": ts, "t": ti}
 
     def fill_rect_with_brush(self, x0: int, y0: int, x1: int, y1: int, erase: bool) -> None:
+        if self._active_layer_locked():
+            self.set_status("Layer locked.", kind="info")
+            return
         ax0, ax1 = sorted((x0, x1))
         ay0, ay1 = sorted((y0, y1))
         g = self._active_grid()
@@ -5682,15 +5762,16 @@ class MapEditor:
                     [
                         ("map_meta", "2  Map and exits", "Map id (I) and edge connections (C)."),
                         ("events", "3  Events", "Event anchors, scripts, and the Events hub."),
-                        ("world", "4  World", "Arrange maps on the world canvas; export with F9."),
+                        ("npc_sprites", "4  NPC Sprites", "Character sprite sheet editor tools."),
+                        ("world", "5  World", "Arrange maps on the world canvas; export with F9."),
                     ],
                 ),
                 (
                     "Reference",
                     [
-                        ("keys", "5  Keybindings", "All configurable shortcuts by category."),
-                        ("script_ops", "6  Script opcodes", "Event script operation reference."),
-                        ("settings", "7  Settings", "Map layers, event layer, key rebinding."),
+                        ("keys", "6  Keybindings", "All configurable shortcuts by category."),
+                        ("script_ops", "7  Script opcodes", "Event script operation reference."),
+                        ("settings", "8  Settings", "Map layers, event layer, key rebinding."),
                     ],
                 ),
             ]
@@ -5752,6 +5833,8 @@ class MapEditor:
                 [
                     f"Layers: {self.key_primary('layer_prev')} / {self.key_primary('layer_next')}, "
                     f"add {self.key_primary('layer_add')}, remove {self.key_primary('layer_remove')}. "
+                    "Lock the active tile layer with the lock icon on the layer chip or in Settings → Tile layers; "
+                    "locked layers cannot be painted, filled, or erased. "
                     f"Tilesets: {self.key_primary('tileset_prev')} / {self.key_primary('tileset_next')}, "
                     f"import {self.key_primary('import_tileset')}, rescale {self.key_primary('rescale_tileset')}. "
                     "Use Settings (gear) or Help → Settings for event layer add/remove.",
@@ -5792,18 +5875,6 @@ class MapEditor:
             )
             return out
 
-        if tab_id == "settings":
-            out.append(("head", "Settings", None))
-            self._help_append_paragraphs(
-                out,
-                wrap_w,
-                [
-                    "Map layer controls and key rebinding live here. Click a key row, then press the new key.",
-                    "S saves key config to tools/map_editor_config.json. R resets defaults. Esc closes help.",
-                ],
-            )
-            return out
-
         if tab_id == "map_meta":
             out.append(("head", "Map id and connections", None))
             self._help_append_paragraphs(
@@ -5830,6 +5901,63 @@ class MapEditor:
                     "Event anchors, scripts, triggers, and sprites are edited in Event Engine — "
                     "not on the main map canvas. Wild patch painting remains on the map when the "
                     "Wild Encounters modal is open. Validate with: python3 tools/validate_map_events.py",
+                    "NPC character sprites: Events hub → NPC Sprites, or see Help → NPC Sprites tab.",
+                ],
+            )
+            return out
+
+        if tab_id == "npc_sprites":
+            out.append(("head", "NPC Sprite Editor", None))
+            self._help_append_paragraphs(
+                out,
+                wrap_w,
+                [
+                    "Open from Events launcher → NPC Sprites. The editor paints 4×4 character walk sheets "
+                    "(default 128×192) exported to src/Graphics/Characters/.",
+                ],
+            )
+            out.append(("head", "Tools (left rail)", None))
+            self._help_append_paragraphs(
+                out,
+                wrap_w,
+                [
+                    "Paint (P): brush — left-drag paints with the current color; right-click erases one pixel.",
+                    "Eraser (E): brush that clears pixels to transparent on drag.",
+                    "Fill (F): click to flood-fill a connected opaque region with the current color.",
+                    "RGBA sliders: set pen color including alpha. Current swatch shows the active color.",
+                ],
+            )
+            out.append(("head", "Layers", None))
+            self._help_append_paragraphs(
+                out,
+                wrap_w,
+                [
+                    "Multiple full-sheet layers composite for preview; Save merges visible layers into one PNG.",
+                    "+ / − add or remove layers. Double-click a layer name to rename. Eye toggles visibility; "
+                    "lock prevents edits on that layer (you can still select a locked layer to view it).",
+                    "Idle→F3, Dup prev, and frame copy operate on the active layer.",
+                ],
+            )
+            out.append(("head", "Canvas and reference", None))
+            self._help_append_paragraphs(
+                out,
+                wrap_w,
+                [
+                    "Direction and frame tabs choose which cell you edit. Edit canvas and reference preview "
+                    "are the same size; wheel on canvas zooms (default 8 px per sprite pixel).",
+                    "Mirror R←L copies the Left direction row to Right after left-side edits.",
+                    "Preset swatches below the canvas; Edit Swatches opens an overlay to add/remove colors "
+                    "(saved to map_editor_config.json).",
+                ],
+            )
+            out.append(("head", "File and shortcuts", None))
+            self._help_append_paragraphs(
+                out,
+                wrap_w,
+                [
+                    "Save / Save As write the composited PNG. New / Load reset or import a sheet into layer 1.",
+                    "W / H fields resize the sheet grid. Ctrl+Z / Ctrl+Y undo and redo layer edits.",
+                    "Help button opens this tab. Back returns to the Events launcher.",
                 ],
             )
             return out
@@ -5845,6 +5973,19 @@ class MapEditor:
                     f"{self.key_primary('toggle_world_labels')} toggles map name badges on nodes.",
                     "Green lines: proximity / adjacency preview. **F9** exports to src/maps/world_layout.json when the cursor is over the canvas.",
                     "Undo/redo apply to world edits when the pointer is over the world canvas.",
+                ],
+            )
+            return out
+
+        if tab_id == "settings":
+            out.append(("head", "Settings", None))
+            self._help_append_paragraphs(
+                out,
+                wrap_w,
+                [
+                    "Map layer controls and key rebinding live here. Click a key row, then press the new key.",
+                    "Tile layer rows: click to select active layer; lock icon toggles edit lock (editor-only).",
+                    "S saves key config to tools/map_editor_config.json. R resets defaults. Esc closes help.",
                 ],
             )
             return out
@@ -6413,6 +6554,12 @@ class MapEditor:
                         continue
                     if self.map_delete_confirm_stem:
                         self.map_delete_confirm_stem = None
+                        continue
+                    if self.layer_chip_lock_btn.collidepoint(event.pos) and event.button == 1:
+                        if self.active_layer_index < len(self.tile_layer_locked):
+                            self.tile_layer_locked[self.active_layer_index] = not self.tile_layer_locked[
+                                self.active_layer_index
+                            ]
                         continue
                     if self.events_btn_rect.collidepoint(event.pos) and event.button == 1:
                         self._clear_all_list_drags()
@@ -7311,6 +7458,7 @@ class MapEditor:
         lid = self._unique_layer_id()
         self.tile_layers.append(empty)
         self.tile_layer_ids.append(lid)
+        self.tile_layer_locked.append(False)
         self.active_layer_index = len(self.tile_layers) - 1
         self.set_status(f"Added tile layer '{lid}'.", kind="ok")
 
@@ -7322,6 +7470,8 @@ class MapEditor:
             return
         del self.tile_layers[idx]
         del self.tile_layer_ids[idx]
+        if idx < len(self.tile_layer_locked):
+            del self.tile_layer_locked[idx]
         if self.active_layer_index >= len(self.tile_layers):
             self.active_layer_index = len(self.tile_layers) - 1
         elif idx < self.active_layer_index:

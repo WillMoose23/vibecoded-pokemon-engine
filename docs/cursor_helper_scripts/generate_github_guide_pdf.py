@@ -6,7 +6,7 @@ from pathlib import Path
 
 from fpdf import FPDF
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 OUT_PDF = ROOT / "docs" / "github-and-setup-guide.pdf"
 REPO_URL = "https://github.com/WillMoose23/vibecoded-pokemon-engine.git"
 
@@ -363,7 +363,7 @@ git log main..development --oneline"""
     pdf.bullet("Update docs/source_doc.md and/or docs/tools_doc.md for code changes.")
     pdf.bullet("Log work in docs/tracker.md with accurate STATUS.")
     pdf.bullet("Run: make test && python3 -m unittest discover -s tests -q")
-    pdf.bullet("Optional sync: python3 tools/sync_cursor_backup.py")
+    pdf.bullet("Optional sync: python3 docs/cursor_helper_scripts/sync_cursor_backup.py")
     pdf.bullet("Never commit secrets (.env, tokens).")
     pdf.bullet("Push to development, not main.")
 

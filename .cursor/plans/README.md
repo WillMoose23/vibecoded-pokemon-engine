@@ -11,7 +11,7 @@ Plans are authored in the global Cursor plans folder:
 Before every push to `development`, run:
 
 ```bash
-python3 tools/sync_cursor_plans.py
+python3 docs/cursor_helper_scripts/sync_cursor_plans.py
 ```
 
 Or ask Cursor to **push to GitHub** — the Git-Push-Development-Rule runs sync automatically.

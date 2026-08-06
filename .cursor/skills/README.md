@@ -13,7 +13,7 @@ Project-specific and shared Cursor **skills** (`SKILL.md` per folder) live here 
 ## Sync before push
 
 ```bash
-python3 tools/sync_cursor_backup.py
+python3 docs/cursor_helper_scripts/sync_cursor_backup.py
 ```
 
 Runs plan + skill sync. Required by **Git-Push-Development-Rule** before every push to `development`.

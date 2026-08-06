@@ -1,7 +1,10 @@
 """FEATURE-MAP-100: pure helpers for 4×4 NPC character sheet layout and pixel ops."""
 from __future__ import annotations
 
+from collections import deque
 from pathlib import Path
+
+import pygame
 
 DEFAULT_SHEET_W = 128
 DEFAULT_SHEET_H = 192
@@ -13,6 +16,23 @@ DIRECTION_ROW = {name: idx for idx, name in enumerate(DIRECTIONS)}
 
 RGBA = tuple[int, int, int, int]
 PixelGrid = list[list[RGBA]]
+
+DEFAULT_NPC_PALETTE: list[RGBA] = [
+    (0, 0, 0, 0),
+    (24, 24, 28, 255),
+    (48, 48, 56, 255),
+    (96, 96, 112, 255),
+    (200, 200, 210, 255),
+    (255, 220, 180, 255),
+    (220, 160, 120, 255),
+    (180, 80, 60, 255),
+    (60, 120, 200, 255),
+    (80, 180, 100, 255),
+    (220, 60, 60, 255),
+    (255, 210, 80, 255),
+]
+
+MAX_NPC_LAYERS = 16
 
 
 def validate_sheet_dimensions(w: int, h: int) -> tuple[bool, str]:
@@ -133,6 +153,81 @@ def list_character_pngs(characters_dir: Path) -> list[str]:
         return []
     names = [p.name for p in characters_dir.iterdir() if p.is_file() and p.suffix.lower() == ".png"]
     return sorted(names, key=str.lower)
+
+
+def flood_fill_surface(surf: pygame.Surface, x: int, y: int, fill_rgba: RGBA) -> int:
+    """4-connected flood fill on opaque pixels matching seed RGBA. Returns pixels painted."""
+    w, h = surf.get_size()
+    if not (0 <= x < w and 0 <= y < h):
+        return 0
+    seed = surf.get_at((x, y))
+    if seed[3] == 0:
+        return 0
+    if tuple(seed) == tuple(fill_rgba):
+        return 0
+    seed_t = tuple(seed)
+    fill_t = tuple(fill_rgba)
+    q: deque[tuple[int, int]] = deque([(x, y)])
+    seen: set[tuple[int, int]] = set()
+    painted = 0
+    while q:
+        cx, cy = q.popleft()
+        if (cx, cy) in seen:
+            continue
+        if not (0 <= cx < w and 0 <= cy < h):
+            continue
+        cur = surf.get_at((cx, cy))
+        if cur[3] == 0 or tuple(cur) != seed_t:
+            continue
+        seen.add((cx, cy))
+        surf.set_at((cx, cy), fill_t)
+        painted += 1
+        for nx, ny in ((cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1)):
+            q.append((nx, ny))
+    return painted
+
+
+def composite_rgba_layers(
+    layers: list[pygame.Surface],
+    visible: list[bool],
+) -> pygame.Surface:
+    """Alpha-composite visible layers bottom-to-top into one SRCALPHA surface."""
+    if not layers:
+        raise ValueError("composite_rgba_layers requires at least one layer")
+    w, h = layers[0].get_size()
+    out = pygame.Surface((w, h), pygame.SRCALPHA)
+    out.fill((0, 0, 0, 0))
+    for layer, vis in zip(layers, visible):
+        if vis and layer.get_size() == (w, h):
+            out.blit(layer, (0, 0))
+    return out
+
+
+def parse_palette_from_config(raw: list | None) -> list[RGBA]:
+    """Parse npcSpriteEditor.paletteColors from config JSON."""
+    if not isinstance(raw, list) or not raw:
+        return list(DEFAULT_NPC_PALETTE)
+    out: list[RGBA] = []
+    for entry in raw:
+        if isinstance(entry, list) and len(entry) >= 4:
+            out.append(
+                (
+                    max(0, min(255, int(entry[0]))),
+                    max(0, min(255, int(entry[1]))),
+                    max(0, min(255, int(entry[2]))),
+                    max(0, min(255, int(entry[3]))),
+                )
+            )
+        elif isinstance(entry, list) and len(entry) == 3:
+            out.append(
+                (
+                    max(0, min(255, int(entry[0]))),
+                    max(0, min(255, int(entry[1]))),
+                    max(0, min(255, int(entry[2]))),
+                    255,
+                )
+            )
+    return out if out else list(DEFAULT_NPC_PALETTE)
 
 
 def sanitize_character_filename(name: str) -> str:
