@@ -111,7 +111,8 @@
     "skipSubflowDeleteConfirm": false
   },
   "tilesetList": {
-    "collapsed": true
+    "collapsed": false,
+    "sectionSplitRatio": 0.55
   },
   "npcSpriteEditor": {
     "defaultZoom": 12,

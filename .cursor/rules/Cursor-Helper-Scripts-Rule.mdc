@@ -1,0 +1,62 @@
+---
+description: Place new helper/utility scripts in docs/cursor_helper_scripts, not tools/ or repo root.
+alwaysApply: true
+---
+
+# Cursor Helper Scripts — Location Rule
+
+## Policy
+
+When creating a **helper script** (validators, migrations, codegen, audits, one-off data sync, Cursor workflow utilities, or any Python/shell automation that is **not** part of the game binary or the pygame map/event editor runtime), **always** put it in:
+
+```
+docs/cursor_helper_scripts/
+```
+
+**Never** add new helper scripts to `tools/`, `src/`, or the repository root unless the user explicitly requests a different location.
+
+---
+
+## What belongs in `docs/cursor_helper_scripts/`
+
+- Validators (e.g. `validate_maps.py`, `validate_map_events.py`)
+- Opcode extract/audit and similar codegen checks
+- One-off or repeatable **migrations** and data-fix scripts
+- Cursor IDE sync/backup utilities
+- Doc generators and repo maintenance automation
+- Scratch or agent-authored utilities that support development but are not imported by `tools/map_editor.py` at runtime
+
+---
+
+## What stays in `tools/`
+
+- `tools/map_editor.py` and modules it imports directly (modals, `event_script_schema.py`, `world_layout.py`, editor config, etc.)
+- Anything required for `python3 tools/map_editor.py` to run
+
+---
+
+## What stays elsewhere
+
+- C++ game source: `src/`, `include/`
+- Game/editor data: `src/maps/`, `src/tilesets.json`, etc.
+- Unit tests: `tests/`
+
+---
+
+## When adding a new script
+
+1. Create the file under `docs/cursor_helper_scripts/<name>.py` (or `.sh` if appropriate).
+2. Resolve repo root with `Path(__file__).resolve().parents[2]` (this directory is two levels below root).
+3. If the script needs map-editor Python modules, add `ROOT / "tools"` to `sys.path` — do **not** move editor modules into `cursor_helper_scripts/`.
+4. Document it in `docs/cursor_helper_scripts/README.md` and add a `TOOL:` entry to `docs/tools_doc.md` per the Documentation Rule.
+5. Log the addition in `docs/tracker.md` when it is part of a tracked task.
+
+---
+
+## Run convention
+
+Invoke from the repository root:
+
+```bash
+python3 docs/cursor_helper_scripts/<script>.py
+```

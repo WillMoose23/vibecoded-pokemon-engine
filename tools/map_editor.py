@@ -183,8 +183,15 @@ MAP_SIZE_MAX = 512
 PALETTE_SCALE_MAX = 12  # FEATURE-MAP-015
 MAP_ZOOM_MIN = 8   # FEATURE-MAP-025
 MAP_ZOOM_MAX = 64  # FEATURE-MAP-025
-TILESET_LIST_W = 292
+TILESET_LIST_W = 310
 TILESET_LIST_COLLAPSED_W = 28
+SIDEBAR_TILESETS_SEARCH_H = 22
+SIDEBAR_LAYERS_HEADER_H = 20
+SIDEBAR_LAYERS_TOOLBAR_H = 26
+SIDEBAR_SPLITTER_H = 4
+SIDEBAR_SPLITTER_MIN_TILESETS_LIST = 60
+SIDEBAR_SPLITTER_MIN_LAYERS_LIST = 80
+SIDEBAR_SECTION_SPLIT_DEFAULT = 0.55
 SECTION_UNFILED_ID = "section:unfiled"
 LIST_CLICK_DOUBLE = 0.45
 
@@ -214,6 +221,7 @@ HELP_HOME_JUMP_TABS: tuple[str, ...] = (
 TILESET_LIST_DRAG_THRESHOLD_PX = 4
 TILESET_LIST_ROW_LINES = 2
 TILESET_LIST_CHILD_INDENT_PX = 20  # FEATURE-MAP-099 / IMPROVEMENT-MAP-015
+TILESET_LIST_CHILD_ROW_EXTRA = 4  # FEATURE-MAP-111 Phase 2: child row = linesize + this
 UNDO_STACK_MAX = 80
 MAP_EDITOR_TOOL_VERSION = "3.0"
 WORLD_LAYOUT_JSON_PATH = MAPS_DIR / WORLD_LAYOUT_JSON_NAME
@@ -831,6 +839,25 @@ class MapEditor:
         self.tileset_list_scroll_x = 0
         _tl_cfg = self.config_get_section("tilesetList")
         self.tileset_list_collapsed = bool(_tl_cfg.get("collapsed", False))
+        self._sidebar_section_split_ratio = float(
+            _tl_cfg.get("sectionSplitRatio", SIDEBAR_SECTION_SPLIT_DEFAULT)
+        )
+        self._sidebar_splitter_drag = False
+        self._sidebar_layout: dict[str, pygame.Rect] = {}
+        self.tileset_list_search = ""
+        self.tileset_list_search_focus = False
+        self.tileset_list_search_rect = pygame.Rect(0, 0, 1, 1)
+        self.layer_list_scroll_y = 0
+        self.layer_rename_index: int | None = None
+        self.layer_rename_buffer = ""
+        self._layer_clipboard: list[list[dict | None]] | None = None
+        self._layer_list_click_prev_time = 0.0
+        self._layer_list_click_prev_index = -1
+        self._layer_panel_row_rects: list[tuple[int, pygame.Rect, pygame.Rect]] = []
+        self._layer_add_btn = pygame.Rect(0, 0, 1, 1)
+        self._layer_copy_btn = pygame.Rect(0, 0, 1, 1)
+        self._layer_paste_btn = pygame.Rect(0, 0, 1, 1)
+        self._layer_delete_btn = pygame.Rect(0, 0, 1, 1)
         self._tileset_list_collapse_btn_rect = pygame.Rect(0, 0, 1, 1)  # FEATURE-MAP-024
         self._tileset_list_header_h = 52
         self.tileset_rename_index: int | None = None
@@ -2016,8 +2043,10 @@ class MapEditor:
         # overlapping Settings at the shared right edge.
         self._map_toolbar_left = self.events_btn_rect.x
         self._clamp_palette_scroll()
+        self._measure_tileset_sidebar_layout()
         self._tileset_list_header_h = self._measure_tileset_list_header_height()
         self._clamp_tileset_list_scroll()
+        self._clamp_layer_list_scroll()
 
     def set_status(self, msg: str, seconds: float = 8.0, kind: str = "info") -> None:
         """kind: info (neutral), ok (success), err (error)."""
@@ -2764,6 +2793,332 @@ class MapEditor:
             return False
         return bool(self.tile_layer_locked[self.active_layer_index])
 
+    def _sync_tile_layer_locked_len(self) -> None:
+        """BUG-MAP-107: keep lock list aligned with tile_layers length."""
+        n = len(self.tile_layers)
+        if len(self.tile_layer_locked) < n:
+            self.tile_layer_locked.extend([False] * (n - len(self.tile_layer_locked)))
+        elif len(self.tile_layer_locked) > n:
+            self.tile_layer_locked = self.tile_layer_locked[:n]
+
+    def _toggle_tile_layer_lock(self, li: int) -> None:
+        """BUG-MAP-107: shared lock toggle for chip and sidebar."""
+        self._sync_tile_layer_locked_len()
+        if not (0 <= li < len(self.tile_layer_locked)):
+            return
+        self.tile_layer_locked[li] = not self.tile_layer_locked[li]
+        lid = self.tile_layer_ids[li] if li < len(self.tile_layer_ids) else "?"
+        state = "locked" if self.tile_layer_locked[li] else "unlocked"
+        self.set_status(f'Layer "{lid}" {state}.', kind="info")
+
+    def _is_ground_layer_index(self, idx: int) -> bool:
+        return 0 <= idx < len(self.tile_layer_ids) and self.tile_layer_ids[idx] == "ground"
+
+    def _sidebar_visible_layer_indices(self) -> list[int]:
+        """Layer indices shown in sidebar (excludes event); ground stays at index 0."""
+        return [i for i, lid in enumerate(self.tile_layer_ids) if lid != "event"]
+
+    def _insert_tile_layer_at(
+        self, idx: int, grid: list[list[dict | None]], lid: str
+    ) -> None:
+        """FEATURE-MAP-111: insert layer preserving event-at-top invariant."""
+        idx = max(0, min(idx, len(self.tile_layers)))
+        self.tile_layers.insert(idx, grid)
+        self.tile_layer_ids.insert(idx, lid)
+        self.tile_layer_locked.insert(idx, False)
+        self.active_layer_index = idx
+        self._sync_tile_layer_locked_len()
+
+    def _normalize_layer_stack_after_load(self) -> None:
+        """Warn-only validation after map load (no silent reorder)."""
+        if "ground" not in self.tile_layer_ids:
+            self.set_status('Warning: map has no "ground" layer.', kind="err")
+        elif self.tile_layer_ids[0] != "ground":
+            self.set_status('Warning: "ground" is not at index 0.', kind="err")
+        self._sync_tile_layer_locked_len()
+
+    def _request_remove_layer_at(self, idx: int) -> None:
+        if self._is_ground_layer_index(idx):
+            self.set_status('Cannot remove "ground" layer.', kind="err")
+            return
+        if len(self.tile_layers) <= 1:
+            self.set_status("Cannot remove the last tile layer.", kind="err")
+            return
+        self.layer_remove_confirm_idx = idx
+
+    def _set_sidebar_section_split_ratio(self, ratio: float, *, persist: bool = True) -> None:
+        self._sidebar_section_split_ratio = max(0.2, min(0.8, ratio))
+        if not persist:
+            return
+        sec = self.config_get_section("tilesetList")
+        sec["sectionSplitRatio"] = self._sidebar_section_split_ratio
+        self.config_set_section("tilesetList", sec)
+
+    def _persist_sidebar_section_split_ratio(self) -> None:
+        """Write in-memory splitter ratio to map_editor_config.json (once per drag)."""
+        sec = self.config_get_section("tilesetList")
+        if sec.get("sectionSplitRatio") == self._sidebar_section_split_ratio:
+            return
+        sec["sectionSplitRatio"] = self._sidebar_section_split_ratio
+        self.config_set_section("tilesetList", sec)
+
+    def _measure_tileset_sidebar_layout(self) -> dict[str, pygame.Rect]:
+        """FEATURE-MAP-111: tilesets + splitter + layers sub-rects within tileset_list_rect."""
+        r = self.tileset_list_rect
+        if self.tileset_list_collapsed:
+            self._sidebar_layout = {"outer": r}
+            return self._sidebar_layout
+        pad = 4
+        inner = pygame.Rect(r.x + pad, r.y + pad, r.w - pad * 2, r.h - pad * 2)
+        y = inner.y
+        tilesets_header = pygame.Rect(inner.x, y, inner.w, 28)
+        y += 28
+        tilesets_search = pygame.Rect(inner.x + 2, y, inner.w - 4, SIDEBAR_TILESETS_SEARCH_H)
+        self.tileset_list_search_rect = tilesets_search
+        y += SIDEBAR_TILESETS_SEARCH_H + 2
+        layers_fixed = SIDEBAR_LAYERS_HEADER_H + SIDEBAR_LAYERS_TOOLBAR_H
+        flex_h = max(0, inner.bottom - y - SIDEBAR_SPLITTER_H - layers_fixed)
+        ratio = max(0.2, min(0.8, self._sidebar_section_split_ratio))
+        min_ts = SIDEBAR_SPLITTER_MIN_TILESETS_LIST
+        min_ly = SIDEBAR_SPLITTER_MIN_LAYERS_LIST
+        if flex_h >= min_ts + min_ly:
+            ts_list_h = int(flex_h * ratio)
+            ts_list_h = max(min_ts, min(ts_list_h, flex_h - min_ly))
+        else:
+            ts_list_h = max(0, flex_h // 2)
+        ly_list_h = max(0, flex_h - ts_list_h)
+        tilesets_list = pygame.Rect(inner.x, y, inner.w - 18, ts_list_h)
+        y += ts_list_h
+        splitter = pygame.Rect(inner.x, y, inner.w, SIDEBAR_SPLITTER_H)
+        y += SIDEBAR_SPLITTER_H
+        layers_header = pygame.Rect(inner.x, y, inner.w, SIDEBAR_LAYERS_HEADER_H)
+        y += SIDEBAR_LAYERS_HEADER_H
+        layers_toolbar = pygame.Rect(inner.x, y, inner.w, SIDEBAR_LAYERS_TOOLBAR_H)
+        y += SIDEBAR_LAYERS_TOOLBAR_H
+        layers_list = pygame.Rect(inner.x, y, inner.w - 4, ly_list_h)
+        self._tileset_list_header_h = tilesets_header.h + tilesets_search.h + 2
+        self._sidebar_layout = {
+            "tilesets_header": tilesets_header,
+            "tilesets_search": tilesets_search,
+            "tilesets_list": tilesets_list,
+            "splitter": splitter,
+            "layers_header": layers_header,
+            "layers_toolbar": layers_toolbar,
+            "layers_list": layers_list,
+        }
+        return self._sidebar_layout
+
+    def _update_splitter_from_mouse(self, my: int) -> None:
+        if self.tileset_list_collapsed:
+            return
+        layout = self._measure_tileset_sidebar_layout()
+        ts_list = layout.get("tilesets_list")
+        ly_list = layout.get("layers_list")
+        if ts_list is None or ly_list is None:
+            return
+        flex_top = ts_list.y
+        flex_bottom = ly_list.bottom
+        flex_h = flex_bottom - flex_top
+        if flex_h < SIDEBAR_SPLITTER_MIN_TILESETS_LIST + SIDEBAR_SPLITTER_MIN_LAYERS_LIST:
+            return
+        rel = max(
+            SIDEBAR_SPLITTER_MIN_TILESETS_LIST,
+            min(my - flex_top, flex_h - SIDEBAR_SPLITTER_MIN_LAYERS_LIST),
+        )
+        self._set_sidebar_section_split_ratio(rel / flex_h, persist=False)
+        self._measure_tileset_sidebar_layout()
+        self._clamp_tileset_list_scroll()
+        self._clamp_layer_list_scroll()
+
+    def _sidebar_textbox(
+        self, rect: pygame.Rect, text: str, focused: bool, placeholder: str
+    ) -> None:
+        pygame.draw.rect(self.screen, (24, 30, 26), rect)
+        border = (100, 140, 110) if focused else (55, 62, 58)
+        pygame.draw.rect(self.screen, border, rect, 1)
+        fs = self.font_small
+        if text:
+            self.screen.blit(
+                fs.render(text + ("|" if focused else ""), True, (220, 225, 235)),
+                (mtext.field_text_x(rect, 5), mtext.field_text_y(fs, rect)),
+            )
+        else:
+            self.screen.blit(
+                fs.render(("|" if focused else "") + placeholder, True, (130, 135, 145)),
+                (mtext.field_text_x(rect, 5), mtext.field_text_y(fs, rect)),
+            )
+
+    def _apply_tileset_search_filter(self, rows: list[dict]) -> list[dict]:
+        q = self.tileset_list_search.strip().lower()
+        if not q:
+            return rows
+        out: list[dict] = []
+        i = 0
+        while i < len(rows):
+            row = rows[i]
+            rk = row["row_kind"]
+            if rk in ("folder", "section"):
+                block = [row]
+                j = i + 1
+                while j < len(rows) and rows[j]["row_kind"] == "tileset":
+                    block.append(rows[j])
+                    j += 1
+                header = block[0]
+                children = block[1:]
+                hname = str(header.get("name", "")).lower()
+                header_match = q in hname
+                matching_children = [c for c in children if q in str(c.get("id", "")).lower()]
+                if header_match:
+                    out.extend(block)
+                elif matching_children:
+                    out.append({**header, "collapsed": False})
+                    out.extend(matching_children)
+                i = j
+            elif rk == "tileset":
+                if q in str(row.get("id", "")).lower():
+                    out.append(row)
+                i += 1
+            else:
+                i += 1
+        return out
+
+    def _tileset_list_row_height(self, row: dict) -> int:
+        """FEATURE-MAP-111 Phase 2: folder/section/root full height; indented child compact."""
+        rk = row.get("row_kind")
+        if rk in ("folder", "section"):
+            return self._tileset_list_row_h()
+        if rk == "tileset":
+            ipx = int(row.get("indent_px", 0))
+            if ipx > 0 or row.get("in_folder"):
+                return self.font_small.get_linesize() + TILESET_LIST_CHILD_ROW_EXTRA
+            return self._tileset_list_row_h()
+        return self._tileset_list_row_h()
+
+    def _tileset_list_is_child_row(self, row: dict) -> bool:
+        if row.get("row_kind") != "tileset":
+            return False
+        return int(row.get("indent_px", 0)) > 0 or bool(row.get("in_folder"))
+
+    def _tileset_list_row_layout(self, rows: list[dict]) -> tuple[list[int], list[int], int]:
+        """Cumulative Y offsets, per-row heights, and total scrollable content height."""
+        offsets: list[int] = []
+        heights: list[int] = []
+        y = 0
+        for row in rows:
+            offsets.append(y)
+            h = self._tileset_list_row_height(row)
+            heights.append(h)
+            y += h
+        return offsets, heights, y + 8
+
+    def _tileset_list_row_index_at_content_y(
+        self,
+        rows: list[dict],
+        rel_y: float,
+        offsets: list[int] | None = None,
+        heights: list[int] | None = None,
+    ) -> int | None:
+        if rel_y < 0:
+            return None
+        if offsets is None or heights is None:
+            offsets, heights, _ = self._tileset_list_row_layout(rows)
+        for ridx, (off, h) in enumerate(zip(offsets, heights)):
+            if off <= rel_y < off + h:
+                return ridx
+        return None
+
+    def _tileset_list_row_at_pixel(self, px: int, py: int) -> tuple[list[dict], int | None]:
+        """Resolve tileset list row index from screen coords (tilesets_list sub-rect only)."""
+        if not self.tileset_list_rect.collidepoint(px, py) or self.tileset_list_collapsed:
+            return [], None
+        layout = self._sidebar_layout or self._measure_tileset_sidebar_layout()
+        list_r = layout.get("tilesets_list")
+        if list_r is None or not list_r.collidepoint(px, py):
+            return [], None
+        rows = self._build_tileset_list_rows()
+        top = list_r.y
+        if py < top or py >= list_r.bottom:
+            return rows, None
+        rel_y = py - top + self.tileset_list_scroll_y
+        offsets, heights, _ = self._tileset_list_row_layout(rows)
+        ridx = self._tileset_list_row_index_at_content_y(rows, rel_y, offsets, heights)
+        return rows, ridx
+
+    def _tileset_list_y_pad_for_height(self, row_h: int, num_lines: int = 1) -> int:
+        lh = self.font_small.get_linesize()
+        inner = max(1, row_h - 2)
+        return max(1, (inner - num_lines * lh) // 2)
+
+    def _clamp_layer_list_scroll(self) -> None:
+        layout = self._sidebar_layout
+        list_r = layout.get("layers_list")
+        if list_r is None:
+            return
+        fs = self.font_small
+        row_h = fs.get_linesize() + 4
+        n = len(self._sidebar_visible_layer_indices())
+        content_h = max(1, n) * (row_h + 2) + 4
+        visible = max(1, list_r.h)
+        max_scroll = max(0, content_h - visible)
+        self.layer_list_scroll_y = max(0, min(self.layer_list_scroll_y, max_scroll))
+
+    def _copy_tile_layer(self) -> None:
+        li = self.active_layer_index
+        if not (0 <= li < len(self.tile_layers)):
+            return
+        self._layer_clipboard = copy.deepcopy(self.tile_layers[li])
+        lid = self.tile_layer_ids[li] if li < len(self.tile_layer_ids) else "?"
+        self.set_status(f'Copied layer "{lid}".', kind="ok")
+
+    def _paste_tile_layer(self) -> None:
+        if self._layer_clipboard is None:
+            self.set_status("Nothing to paste.", kind="info")
+            return
+        w, h = self.map_w, self.map_h
+        src = self._layer_clipboard
+        grid = [[None for _ in range(w)] for _ in range(h)]
+        for y in range(min(h, len(src))):
+            for x in range(min(w, len(src[y]))):
+                grid[y][x] = copy.deepcopy(src[y][x]) if src[y][x] is not None else None
+        lid = self._unique_layer_id()
+        insert_idx = max(1, self.active_layer_index + 1)
+        ev = self.event_layer_index()
+        if ev is not None:
+            insert_idx = min(insert_idx, ev)
+        self._undo_checkpoint()
+        self._insert_tile_layer_at(insert_idx, grid, lid)
+        self.set_status(f'Pasted layer as "{lid}".', kind="ok")
+
+    def _apply_layer_rename(self) -> None:
+        li = self.layer_rename_index
+        if li is None or not (0 <= li < len(self.tile_layer_ids)):
+            self.layer_rename_index = None
+            self.layer_rename_buffer = ""
+            return
+        if self._is_ground_layer_index(li):
+            self.set_status('Cannot rename "ground" layer.', kind="err")
+            self.layer_rename_index = None
+            self.layer_rename_buffer = ""
+            return
+        new_id = "".join(
+            c if c.isalnum() or c in "._-" else "_" for c in self.layer_rename_buffer.strip()
+        )[:64]
+        if not new_id or new_id in ("ground", "event"):
+            self.set_status("Invalid layer id.", kind="err")
+            return
+        if new_id in self.tile_layer_ids and self.tile_layer_ids.index(new_id) != li:
+            self.set_status("Layer id already in use.", kind="err")
+            return
+        if new_id == self.tile_layer_ids[li]:
+            self.layer_rename_index = None
+            self.layer_rename_buffer = ""
+            return
+        self._undo_checkpoint()
+        self.tile_layer_ids[li] = new_id
+        self.layer_rename_index = None
+        self.layer_rename_buffer = ""
+        self.set_status(f'Renamed layer to "{new_id}".', kind="ok")
+
     def _alloc_layers(self) -> None:
         self._alloc_walk_trans()
         self._reset_tile_layers_single()
@@ -2858,6 +3213,7 @@ class MapEditor:
             "th": self.th,
             "tile_layers": copy.deepcopy(self.tile_layers),
             "tile_layer_ids": list(self.tile_layer_ids),
+            "tile_layer_locked": list(self.tile_layer_locked),
             "walk": [row[:] for row in self.walk],
             "trans": [row[:] for row in self.trans],
             "over_player": [row[:] for row in self.over_player],
@@ -2886,6 +3242,12 @@ class MapEditor:
         self.th = int(s["th"])
         self.tile_layers = copy.deepcopy(s["tile_layers"])
         self.tile_layer_ids = list(s["tile_layer_ids"])
+        raw_locked = s.get("tile_layer_locked")
+        if isinstance(raw_locked, list):
+            self.tile_layer_locked = [bool(x) for x in raw_locked]
+        else:
+            self.tile_layer_locked = [False] * len(self.tile_layers)
+        self._sync_tile_layer_locked_len()
         self.walk = [row[:] for row in s["walk"]]
         self.trans = [row[:] for row in s["trans"]]
         raw_over = s.get("over_player")
@@ -2927,6 +3289,7 @@ class MapEditor:
         self.selected_wild_patch_index = int(s.get("selected_wild_patch_index", 0))
         self._wild_modal_dirty = bool(s.get("wild_modal_dirty", False))
         self.reload_tileset_sheet()
+        self._normalize_layer_stack_after_load()
         self._clear_undo_stacks()
         self._refresh_brush_palette_outline()
         self._invalidate_valid_stands_cache()
@@ -3128,6 +3491,7 @@ class MapEditor:
             self.map_events = [copy.deepcopy(x) for x in raw_ev if isinstance(x, dict)]
         else:
             self.map_events = []
+        self._normalize_layer_stack_after_load()
         self._clear_undo_stacks()
         self._map_disk_backing_id = path.stem
         self.saved_once = True
@@ -3339,12 +3703,18 @@ class MapEditor:
         return ed
 
     def _tileset_list_cache_token(self) -> tuple:
+        q = self.tileset_list_search.strip().lower()
         ed = self.registry.get("editorTilesetFolders")
         if not isinstance(ed, dict):
-            return (len(self.tileset_defs),)
+            return (len(self.tileset_defs), q)
         order = ed.get("order") or []
         collapsed = ed.get("collapsed") or []
-        return (len(self.tileset_defs), len(order), tuple(str(x) for x in collapsed))
+        return (
+            len(self.tileset_defs),
+            len(order),
+            tuple(str(x) for x in collapsed),
+            q,
+        )
 
     def _build_tileset_list_rows(self) -> list[dict]:
         token = self._tileset_list_cache_token()
@@ -3353,6 +3723,8 @@ class MapEditor:
         ed = self._editor_folder_blob()
         order = list(ed.get("order") or [])
         collapsed: set[str] = set(str(x) for x in (ed.get("collapsed") or []))
+        if self.tileset_list_search.strip():
+            collapsed = set()
         folder_meta: dict[str, dict] = {}
         for f in ed.get("folders") or []:
             if isinstance(f, dict) and f.get("id"):
@@ -3439,6 +3811,7 @@ class MapEditor:
                             "in_folder": None,
                         }
                     )
+        rows = self._apply_tileset_search_filter(rows)
         self._tileset_list_rows_cache_token = token
         self._tileset_list_rows_cache = rows
         return rows
@@ -3598,76 +3971,33 @@ class MapEditor:
         self.folder_color_prompt_buffer = default
 
     def _tileset_list_hit(self, px: int, py: int) -> tuple[str, object | None]:
-        if not self.tileset_list_rect.collidepoint(px, py):
+        rows, ridx = self._tileset_list_row_at_pixel(px, py)
+        if ridx is None:
             return ("none", None)
-        rows = self._build_tileset_list_rows()
-        rh = self._tileset_list_row_h()
-        top = self.tileset_list_rect.y + 4 + self._tileset_list_header_h
-        bottom = self.tileset_list_rect.bottom - 4
-        if py < top or py >= bottom:
-            return ("none", None)
-        rel_y = py - top + self.tileset_list_scroll_y
-        if rel_y < 0:
-            return ("none", None)
-        ridx = int(rel_y // rh)
-        if not (0 <= ridx < len(rows)):
+        layout = self._sidebar_layout or self._measure_tileset_sidebar_layout()
+        list_r = layout.get("tilesets_list")
+        if list_r is None:
             return ("none", None)
         row = rows[ridx]
         rk = row["row_kind"]
         if rk == "section":
             sid = str(row.get("section_id") or "")
-            chevron = px < self.tileset_list_rect.x + 24
+            chevron = px < list_r.x + 24
             return ("section", (sid, chevron))
         if rk == "folder":
-            chevron = px < self.tileset_list_rect.x + 24
+            chevron = px < list_r.x + 24
             return ("folder", (row["folder_id"], chevron))
         return ("tileset", row["def_index"])
 
     def _tileset_list_row_index_at_pixel(self, px: int, py: int) -> int | None:
-        if not self.tileset_list_rect.collidepoint(px, py):
-            return None
-        rows = self._build_tileset_list_rows()
-        rh = self._tileset_list_row_h()
-        top = self.tileset_list_rect.y + 4 + self._tileset_list_header_h
-        bottom = self.tileset_list_rect.bottom - 4
-        if py < top or py >= bottom:
-            return None
-        rel_y = py - top + self.tileset_list_scroll_y
-        if rel_y < 0:
-            return None
-        ridx = int(rel_y // rh)
-        if 0 <= ridx < len(rows):
-            return ridx
-        return None
+        _, ridx = self._tileset_list_row_at_pixel(px, py)
+        return ridx
 
     def _measure_tileset_list_header_height(self) -> int:
-        """Must match tileset header block in draw() (including wrapped title width)."""
+        """Must match tileset header block in draw() (title + search, no drag hints)."""
         if self.tileset_list_collapsed:
             return 24
-        pad = 6
-        list_r = self.tileset_list_rect
-        hx = list_r.x + 6
-        hw = max(80, list_r.w - 12)
-        hint_w = max(40, list_r.w - 28)
-        btn_left = list_r.right - 86
-        title_w = max(40, min(hw, btn_left - hx - 8))
-        lh_title = self.font.get_linesize()
-        lsh = self.font_small.get_linesize()
-        n_title = len(_wrap_lines_to_width(self.font, "Tilesets", title_w))
-        n1 = len(_wrap_lines_to_width(self.font_small, _TILESET_LIST_HINT_1, hint_w))
-        n2 = len(_wrap_lines_to_width(self.font_small, _TILESET_LIST_HINT_2, hint_w))
-        n3 = len(_wrap_lines_to_width(self.font_small, _TILESET_LIST_HINT_3, hint_w))
-        return (
-            pad
-            + n_title * lh_title
-            + _TILESET_LIST_HINT_GAP_AFTER_TITLE
-            + n1 * lsh
-            + 4
-            + n2 * lsh
-            + 2
-            + n3 * lsh
-            + 4
-        )
+        return 28 + SIDEBAR_TILESETS_SEARCH_H + 2
 
     def _clear_tileset_list_drag(self) -> None:
         self._tileset_drag_def_index = None
@@ -3894,15 +4224,18 @@ class MapEditor:
         return [first, second]
 
     def _clamp_tileset_list_scroll(self) -> None:
-        rh = self._tileset_list_row_h()
-        n = len(self._build_tileset_list_rows())
-        content_h = n * rh + 8
-        visible = max(1, self.tileset_list_rect.h - 8 - self._tileset_list_header_h)
+        rows = self._build_tileset_list_rows()
+        _, _, content_h = self._tileset_list_row_layout(rows)
+        layout = self._sidebar_layout or self._measure_tileset_sidebar_layout()
+        list_r = layout.get("tilesets_list")
+        visible = max(1, list_r.h if list_r is not None else self.tileset_list_rect.h - 8 - self._tileset_list_header_h)
         max_scroll = max(0, content_h - visible)
         self.tileset_list_scroll_y = max(0, min(self.tileset_list_scroll_y, max_scroll))
 
     def _clamp_tileset_list_scroll_x(self) -> None:  # FEATURE-MAP-024
-        inner_w = max(1, self.tileset_list_rect.w - 22)
+        layout = self._sidebar_layout or self._measure_tileset_sidebar_layout()
+        list_r = layout.get("tilesets_list")
+        inner_w = max(1, list_r.w if list_r is not None else self.tileset_list_rect.w - 22)
         content_w = TILESET_LIST_W + TILESET_LIST_CHILD_INDENT_PX * 4
         max_scroll = max(0, content_w - inner_w)
         self.tileset_list_scroll_x = max(0, min(self.tileset_list_scroll_x, max_scroll))
@@ -4204,6 +4537,296 @@ class MapEditor:
             self._scaled_tile_cache.popitem(last=False)
         surf.blit(scaled, (dst_x, dst_y))
 
+    def _draw_tileset_list_content(self, list_inner: pygame.Rect) -> None:
+        prev_clip = self.screen.get_clip()
+        self.screen.set_clip(list_inner)
+        y0 = list_inner.y
+        lh = self.font_small.get_linesize()
+        fs = self.font_small
+        rows = self._build_tileset_list_rows()
+        offsets, heights, content_h = self._tileset_list_row_layout(rows)
+        drop_ridx: int | None = None
+        search_active = bool(self.tileset_list_search.strip())
+        if not search_active and (
+            (self._tileset_drag_moved and self._tileset_drag_def_index is not None)
+            or (self._folder_drag_moved and self._folder_drag_id is not None)
+        ):
+            mx, my = pygame.mouse.get_pos()
+            drop_ridx = self._tileset_list_row_index_at_pixel(mx, my)
+        hsx = self.tileset_list_scroll_x
+        for ridx, row in enumerate(rows):
+            rh = heights[ridx]
+            ry = y0 + offsets[ridx] - self.tileset_list_scroll_y
+            if ry + rh < list_inner.y - 2 or ry > list_inner.bottom + 2:
+                continue
+            rk = row["row_kind"]
+            ipx = int(row.get("indent_px", 0))
+            is_child = self._tileset_list_is_child_row(row)
+            row_x = list_inner.x + (ipx if is_child else 0)
+            row_w = list_inner.w - (ipx if is_child else 0)
+            row_r = pygame.Rect(row_x, ry, row_w, rh - 2)
+            if rk == "section":
+                pygame.draw.rect(self.screen, (48, 46, 56), row_r)
+                sec_b = 2 if drop_ridx == ridx else 1
+                sec_c = (255, 210, 80) if drop_ridx == ridx else (68, 66, 78)
+                pygame.draw.rect(self.screen, sec_c, row_r, sec_b)
+                sec_chev = ">" if row.get("collapsed") else "v"
+                ypad = self._tileset_list_y_pad_for_height(rh, 1)
+                self.screen.blit(
+                    fs.render(sec_chev, True, (220, 225, 235)),
+                    (list_inner.x + 8 - hsx, ry + ypad),
+                )
+                self.screen.blit(
+                    fs.render(str(row.get("name", "")), True, (160, 165, 185)),
+                    (list_inner.x + 28 - hsx, ry + ypad),
+                )
+            elif rk == "folder":
+                fc = row["color"]
+                folder_drag_here = (
+                    self._folder_drag_moved
+                    and self._folder_drag_id is not None
+                    and str(row.get("folder_id")) == self._folder_drag_id
+                )
+                base = (fc[0] // 3 + 20, fc[1] // 3 + 20, fc[2] // 3 + 24)
+                if folder_drag_here:
+                    base = (min(255, base[0] + 25), min(255, base[1] + 25), min(255, base[2] + 28))
+                pygame.draw.rect(self.screen, base, row_r)
+                fb = 2 if drop_ridx == ridx or folder_drag_here else 1
+                fcol = (255, 210, 80) if drop_ridx == ridx else (
+                    min(255, fc[0] + 40),
+                    min(255, fc[1] + 40),
+                    min(255, fc[2] + 50),
+                )
+                pygame.draw.rect(self.screen, fcol, row_r, fb)
+                chev = ">" if row["collapsed"] else "v"
+                ypad = self._tileset_list_y_pad_for_height(rh, 1)
+                self.screen.blit(
+                    fs.render(chev, True, (220, 225, 235)),
+                    (list_inner.x + 8 - hsx, ry + ypad),
+                )
+                fname = str(row.get("name", ""))
+                col = (245, 250, 255)
+                if self.folder_rename_id == row["folder_id"]:
+                    buf = self.folder_rename_buffer or ""
+                    self.screen.blit(
+                        fs.render(f"[{buf}]", True, col),
+                        (list_inner.x + 28 - hsx, ry + ypad),
+                    )
+                else:
+                    self.screen.blit(
+                        fs.render(fname, True, col),
+                        (list_inner.x + 28 - hsx, ry + ypad),
+                    )
+            else:
+                i = int(row["def_index"])
+                tid = str(row.get("id", "?"))
+                tx = row_x + 8 - hsx
+                sel = i == self.tileset_index
+                drag_here = self._tileset_drag_moved and self._tileset_drag_def_index == i
+                if is_child:
+                    bg = (62, 66, 78) if drag_here else ((52, 56, 66) if sel else (34, 36, 42))
+                else:
+                    bg = (68, 72, 90) if drag_here else ((58, 62, 78) if sel else (40, 42, 50))
+                pygame.draw.rect(self.screen, bg, row_r)
+                br_col = (255, 210, 80) if drop_ridx == ridx else ((70, 74, 88) if sel else (52, 54, 62))
+                pygame.draw.rect(self.screen, br_col, row_r, 2 if drop_ridx == ridx else 1)
+                col = (255, 225, 120) if sel else (185, 188, 205)
+                if self.tileset_rename_index == i:
+                    buf = self.tileset_rename_buffer or ""
+                    line = f"[{buf}]"
+                    ypad = self._tileset_list_y_pad_for_height(rh, 1)
+                    self.screen.blit(fs.render(line, True, col), (tx, ry + ypad))
+                elif is_child:
+                    lbl = mtext.truncate_to_width(fs, tid, max(20, row_r.w - 16))
+                    ypad = self._tileset_list_y_pad_for_height(rh, 1)
+                    self.screen.blit(fs.render(lbl, True, col), (tx, ry + ypad))
+                else:
+                    lines = self._tileset_id_lines(tid, ipx)
+                    ts_ypn = self._tileset_list_y_pad_for_height(rh, len(lines))
+                    for li, part in enumerate(lines):
+                        self.screen.blit(
+                            fs.render(part, True, col),
+                            (tx, ry + ts_ypn + li * lh),
+                        )
+        self.screen.set_clip(prev_clip)
+        visible_h = list_inner.h
+        max_scroll = max(0, content_h - visible_h)
+        if max_scroll > 0 and list_inner.h > 40:
+            thumb_h = max(28, int(visible_h * visible_h / content_h))
+            t_y = list_inner.y + int(
+                (self.tileset_list_scroll_y / max_scroll) * max(1, visible_h - thumb_h)
+            )
+            sbar = pygame.Rect(list_inner.right + 4, list_inner.y, 5, visible_h)
+            pygame.draw.rect(self.screen, (35, 35, 42), sbar)
+            pygame.draw.rect(self.screen, (95, 98, 115), (sbar.x, t_y, 5, thumb_h))
+        content_w = TILESET_LIST_W + TILESET_LIST_CHILD_INDENT_PX * 4
+        inner_w = list_inner.w
+        max_scroll_x = max(0, content_w - inner_w)
+        if max_scroll_x > 0 and list_inner.w > 40:
+            thumb_w = max(28, int(inner_w * inner_w / content_w))
+            t_x = list_inner.x + int(
+                (self.tileset_list_scroll_x / max_scroll_x) * max(1, inner_w - thumb_w)
+            )
+            hbar = pygame.Rect(list_inner.x, list_inner.bottom + 2, inner_w, 5)
+            pygame.draw.rect(self.screen, (35, 35, 42), hbar)
+            pygame.draw.rect(self.screen, (95, 98, 115), (t_x, hbar.y, thumb_w, 5))
+
+    def _draw_layers_sidebar_section(self) -> None:
+        layout = self._sidebar_layout
+        fs = self.font_small
+        lh = fs.get_linesize()
+        row_h = lh + 4
+        hdr = layout.get("layers_header")
+        if hdr is None:
+            return
+        n = len(self._sidebar_visible_layer_indices())
+        self.screen.blit(fs.render(f"Layers ({n})", True, (190, 200, 220)), (hdr.x + 4, hdr.y + 2))
+        tb = layout["layers_toolbar"]
+        btn_w = max(36, (tb.w - 12) // 4)
+        labels = ["Add", "Copy", "Paste", "Del"]
+        rects: list[pygame.Rect] = []
+        for i, lab in enumerate(labels):
+            br = pygame.Rect(tb.x + 2 + i * (btn_w + 2), tb.y + 2, btn_w, tb.h - 4)
+            rects.append(br)
+            pygame.draw.rect(self.screen, (48, 52, 62), br)
+            pygame.draw.rect(self.screen, (72, 78, 92), br, 1)
+            self.screen.blit(fs.render(lab, True, (220, 225, 235)), (br.x + 6, br.y + 3))
+        self._layer_add_btn, self._layer_copy_btn, self._layer_paste_btn, self._layer_delete_btn = rects
+        list_inner = layout["layers_list"]
+        self._layer_panel_row_rects = []
+        display_order = list(reversed(self._sidebar_visible_layer_indices()))
+        prev_clip = self.screen.get_clip()
+        self.screen.set_clip(list_inner)
+        y0 = list_inner.y
+        for disp_i, li in enumerate(display_order):
+            ry = y0 + disp_i * (row_h + 2) - self.layer_list_scroll_y
+            if ry + row_h < list_inner.y - 2 or ry > list_inner.bottom + 2:
+                continue
+            row = pygame.Rect(list_inner.x, ry, list_inner.w - 26, row_h)
+            lock = pygame.Rect(row.right + 2, row.y + 2, 20, row_h - 4)
+            lid = self.tile_layer_ids[li]
+            if li == self.active_layer_index:
+                pygame.draw.rect(self.screen, (42, 58, 48), row)
+            elif li < len(self.tile_layer_locked) and self.tile_layer_locked[li]:
+                pygame.draw.rect(self.screen, (38, 38, 44), row)
+            else:
+                pygame.draw.rect(self.screen, (40, 42, 50), row)
+            if self.layer_rename_index == li:
+                lbl = f"[{self.layer_rename_buffer}]"
+            else:
+                lbl = mtext.truncate_to_width(fs, lid, row.w - 8)
+            self.screen.blit(fs.render(lbl, True, (220, 225, 235)), (row.x + 6, row.y + 2))
+            lock_on = li < len(self.tile_layer_locked) and self.tile_layer_locked[li]
+            self.screen.blit(
+                fs.render("🔒" if lock_on else "🔓", True, (200, 205, 215)),
+                (lock.x + 2, lock.y + 1),
+            )
+            self._layer_panel_row_rects.append((li, row, lock))
+        self.screen.set_clip(prev_clip)
+        content_h = max(1, len(display_order)) * (row_h + 2) + 4
+        visible_h = list_inner.h
+        max_scroll = max(0, content_h - visible_h)
+        if max_scroll > 0 and list_inner.h > 24:
+            thumb_h = max(20, int(visible_h * visible_h / content_h))
+            t_y = list_inner.y + int(
+                (self.layer_list_scroll_y / max_scroll) * max(1, visible_h - thumb_h)
+            )
+            sbar = pygame.Rect(list_inner.right + 2, list_inner.y, 4, visible_h)
+            pygame.draw.rect(self.screen, (35, 35, 42), sbar)
+            pygame.draw.rect(self.screen, (95, 98, 115), (sbar.x, t_y, 4, thumb_h))
+
+    def _draw_tileset_sidebar_expanded(self) -> None:
+        """FEATURE-MAP-111: tilesets header/search/list + splitter + layers panel."""
+        layout = self._measure_tileset_sidebar_layout()
+        hdr = layout["tilesets_header"]
+        hx = hdr.x + 2
+        hy = hdr.y + 3
+        self._tileset_list_collapse_btn_rect = pygame.Rect(hx, hy, 20, 22)
+        pygame.draw.rect(self.screen, (44, 48, 56), self._tileset_list_collapse_btn_rect)
+        self.screen.blit(
+            self.font_small.render("<", True, (210, 215, 225)),
+            (hx + 6, hy + 4),
+        )
+        self.new_folder_btn_rect = pygame.Rect(hdr.right - 80, hy, 74, 22)
+        pygame.draw.rect(self.screen, (56, 92, 72), self.new_folder_btn_rect)
+        pygame.draw.rect(self.screen, (100, 140, 110), self.new_folder_btn_rect, 1)
+        self.screen.blit(
+            self.font_small.render("+ Folder", True, (235, 245, 235)),
+            (self.new_folder_btn_rect.x + 8, self.new_folder_btn_rect.y + 5),
+        )
+        title_x = hx + 24
+        self.screen.blit(
+            self.font.render("Tilesets", True, (220, 220, 220)),
+            (title_x, hy + 2),
+        )
+        search_r = layout["tilesets_search"]
+        self._sidebar_textbox(
+            search_r,
+            self.tileset_list_search,
+            self.tileset_list_search_focus,
+            "search tilesets",
+        )
+        list_inner = layout["tilesets_list"]
+        self._draw_tileset_list_content(list_inner)
+        splitter = layout["splitter"]
+        split_col = (100, 140, 110) if self._sidebar_splitter_drag else (58, 62, 72)
+        pygame.draw.rect(self.screen, split_col, splitter)
+        self._draw_layers_sidebar_section()
+
+    def _handle_sidebar_click(self, mx: int, my: int, button: int) -> bool:
+        """Return True if click was consumed by sidebar chrome (not tileset rows)."""
+        if self.tileset_list_collapsed:
+            return False
+        layout = self._sidebar_layout or self._measure_tileset_sidebar_layout()
+        if button == 1 and layout.get("splitter") and layout["splitter"].collidepoint(mx, my):
+            self._sidebar_splitter_drag = True
+            return True
+        if layout.get("tilesets_search") and layout["tilesets_search"].collidepoint(mx, my):
+            if button == 1:
+                self.tileset_list_search_focus = True
+                self.layer_rename_index = None
+            return True
+        if button == 1:
+            self.tileset_list_search_focus = False
+        if button == 1 and self._layer_add_btn.collidepoint(mx, my):
+            self.add_tile_layer()
+            return True
+        if button == 1 and self._layer_copy_btn.collidepoint(mx, my):
+            self._copy_tile_layer()
+            return True
+        if button == 1 and self._layer_paste_btn.collidepoint(mx, my):
+            self._paste_tile_layer()
+            return True
+        if button == 1 and self._layer_delete_btn.collidepoint(mx, my):
+            self._request_remove_layer_at(self.active_layer_index)
+            return True
+        for li, row, lock in self._layer_panel_row_rects:
+            if lock.collidepoint(mx, my) and button == 1:
+                self._toggle_tile_layer_lock(li)
+                return True
+            if row.collidepoint(mx, my) and button == 1:
+                self.active_layer_index = li
+                now = time.time()
+                if (
+                    li == self._layer_list_click_prev_index
+                    and self._layer_list_click_prev_time > 0
+                    and now - self._layer_list_click_prev_time < LIST_CLICK_DOUBLE
+                ):
+                    if self._is_ground_layer_index(li):
+                        self.set_status('Cannot rename "ground" layer.', kind="err")
+                    else:
+                        self.layer_rename_index = li
+                        self.layer_rename_buffer = self.tile_layer_ids[li]
+                    self._layer_list_click_prev_time = 0.0
+                else:
+                    self._layer_list_click_prev_time = now
+                    self._layer_list_click_prev_index = li
+                return True
+        layers_list = layout.get("layers_list")
+        if layers_list and layers_list.collidepoint(mx, my):
+            return True
+        return False
+
     def draw(self) -> None:
         self._ov_refresh_ran_this_frame = False
         self.is_in_map_editor = not self._any_blocking_modal_open()
@@ -4222,181 +4845,7 @@ class MapEditor:
                 (strip_cx - 4, strip_cy - 8),
             )
         else:
-            hx = self.tileset_list_rect.x + 6
-            hw = max(80, self.tileset_list_rect.w - 12)
-            hy = self.tileset_list_rect.y + 6
-            self._tileset_list_collapse_btn_rect = pygame.Rect(hx, hy, 20, 22)
-            pygame.draw.rect(self.screen, (44, 48, 56), self._tileset_list_collapse_btn_rect)
-            self.screen.blit(
-                self.font_small.render("<", True, (210, 215, 225)),
-                (hx + 6, hy + 4),
-            )
-            hx += 24
-            self.new_folder_btn_rect = pygame.Rect(self.tileset_list_rect.right - 86, hy, 78, 22)
-            pygame.draw.rect(self.screen, (56, 92, 72), self.new_folder_btn_rect)
-            pygame.draw.rect(self.screen, (100, 140, 110), self.new_folder_btn_rect, 1)
-            self.screen.blit(
-                self.font_small.render("+ Folder", True, (235, 245, 235)),
-                (self.new_folder_btn_rect.x + 10, self.new_folder_btn_rect.y + 5),
-            )
-            title_w = max(40, min(hw, self.new_folder_btn_rect.x - hx - 8))
-            hint_w = max(40, self.tileset_list_rect.w - 28)
-            hint_h = 220
-            hy = blit_wrapped_text(
-                self.screen,
-                self.font,
-                "Tilesets",
-                pygame.Rect(hx, hy, title_w, hint_h),
-                (220, 220, 220),
-            )
-            hy += _TILESET_LIST_HINT_GAP_AFTER_TITLE
-            hy = blit_wrapped_text(
-                self.screen,
-                self.font_small,
-                _TILESET_LIST_HINT_1,
-                pygame.Rect(hx, hy, hint_w, hint_h),
-                (145, 145, 160),
-            )
-            hy += 4  # IMPROVEMENT-MAP-016: extra gap before hint 2
-            hy = blit_wrapped_text(
-                self.screen,
-                self.font_small,
-                _TILESET_LIST_HINT_2,
-                pygame.Rect(hx, hy, hint_w, hint_h),
-                (135, 135, 150),
-            )
-            hy += 2
-            blit_wrapped_text(
-                self.screen,
-                self.font_small,
-                _TILESET_LIST_HINT_3,
-                pygame.Rect(hx, hy, hint_w, hint_h),
-                (125, 125, 140),
-            )
-            rh = self._tileset_list_row_h()
-            list_inner = pygame.Rect(
-                self.tileset_list_rect.x + 4,
-                self.tileset_list_rect.y + 4 + self._tileset_list_header_h,
-                self.tileset_list_rect.w - 22,
-                self.tileset_list_rect.h - 8 - self._tileset_list_header_h,
-            )
-            prev_clip = self.screen.get_clip()
-            self.screen.set_clip(list_inner)
-            y0 = list_inner.y
-            lh = self.font_small.get_linesize()
-            rows = self._build_tileset_list_rows()
-            drop_ridx: int | None = None
-            if (self._tileset_drag_moved and self._tileset_drag_def_index is not None) or (
-                self._folder_drag_moved and self._folder_drag_id is not None
-            ):
-                mx, my = pygame.mouse.get_pos()
-                drop_ridx = self._tileset_list_row_index_at_pixel(mx, my)
-            ts_ypad1 = self._tileset_list_y_pad_single_line()
-            hsx = self.tileset_list_scroll_x  # FEATURE-MAP-024: horizontal scroll offset
-            for ridx, row in enumerate(rows):
-                ry = y0 + ridx * rh - self.tileset_list_scroll_y
-                if ry + rh < list_inner.y - 2 or ry > list_inner.bottom + 2:
-                    continue
-                row_r = pygame.Rect(list_inner.x, ry, list_inner.w, rh - 2)
-                rk = row["row_kind"]
-                if rk == "section":
-                    pygame.draw.rect(self.screen, (48, 46, 56), row_r)
-                    sec_b = 2 if drop_ridx == ridx else 1
-                    sec_c = (255, 210, 80) if drop_ridx == ridx else (68, 66, 78)
-                    pygame.draw.rect(self.screen, sec_c, row_r, sec_b)
-                    sec_chev = ">" if row.get("collapsed") else "v"
-                    self.screen.blit(
-                        self.font_small.render(sec_chev, True, (220, 225, 235)),
-                        (list_inner.x + 8 - hsx, ry + ts_ypad1),
-                    )
-                    self.screen.blit(
-                        self.font_small.render(str(row.get("name", "")), True, (160, 165, 185)),
-                        (list_inner.x + 28 - hsx, ry + ts_ypad1),
-                    )
-                elif rk == "folder":
-                    fc = row["color"]
-                    folder_drag_here = (
-                        self._folder_drag_moved
-                        and self._folder_drag_id is not None
-                        and str(row.get("folder_id")) == self._folder_drag_id
-                    )
-                    base = (fc[0] // 3 + 20, fc[1] // 3 + 20, fc[2] // 3 + 24)
-                    if folder_drag_here:
-                        base = (min(255, base[0] + 25), min(255, base[1] + 25), min(255, base[2] + 28))
-                    pygame.draw.rect(self.screen, base, row_r)
-                    fb = 2 if drop_ridx == ridx or folder_drag_here else 1
-                    fcol = (255, 210, 80) if drop_ridx == ridx else (
-                        min(255, fc[0] + 40),
-                        min(255, fc[1] + 40),
-                        min(255, fc[2] + 50),
-                    )
-                    pygame.draw.rect(self.screen, fcol, row_r, fb)
-                    chev = ">" if row["collapsed"] else "v"
-                    self.screen.blit(
-                        self.font_small.render(chev, True, (220, 225, 235)),
-                        (list_inner.x + 8 - hsx, ry + ts_ypad1),
-                    )
-                    fname = str(row.get("name", ""))
-                    col = (245, 250, 255)
-                    if self.folder_rename_id == row["folder_id"]:
-                        buf = self.folder_rename_buffer or ""
-                        self.screen.blit(
-                            self.font_small.render(f"[{buf}]", True, col),
-                            (list_inner.x + 28 - hsx, ry + ts_ypad1),
-                        )
-                    else:
-                        self.screen.blit(
-                            self.font_small.render(fname, True, col),
-                            (list_inner.x + 28 - hsx, ry + ts_ypad1),
-                        )
-                else:
-                    i = int(row["def_index"])
-                    tid = str(row.get("id", "?"))
-                    ipx = int(row.get("indent_px", 0))
-                    tx = list_inner.x + 8 + ipx - hsx
-                    sel = i == self.tileset_index
-                    drag_here = self._tileset_drag_moved and self._tileset_drag_def_index == i
-                    bg = (68, 72, 90) if drag_here else ((58, 62, 78) if sel else (40, 42, 50))
-                    pygame.draw.rect(self.screen, bg, row_r)
-                    br_col = (255, 210, 80) if drop_ridx == ridx else ((70, 74, 88) if sel else (52, 54, 62))
-                    pygame.draw.rect(self.screen, br_col, row_r, 2 if drop_ridx == ridx else 1)
-                    col = (255, 225, 120) if sel else (185, 188, 205)
-                    if self.tileset_rename_index == i:
-                        buf = self.tileset_rename_buffer or ""
-                        line = f"[{buf}]"
-                        self.screen.blit(self.font_small.render(line, True, col), (tx, ry + ts_ypad1))
-                    else:
-                        lines = self._tileset_id_lines(tid, ipx)
-                        ts_ypn = self._tileset_list_y_pad_multiline(len(lines))
-                        for li, part in enumerate(lines):
-                            self.screen.blit(
-                                self.font_small.render(part, True, col),
-                                (tx, ry + ts_ypn + li * lh),
-                            )
-            self.screen.set_clip(prev_clip)
-            content_h = max(1, len(rows)) * rh + 8
-            visible_h = list_inner.h
-            max_scroll = max(0, content_h - visible_h)
-            if max_scroll > 0 and list_inner.h > 40:
-                thumb_h = max(28, int(visible_h * visible_h / content_h))
-                t_y = list_inner.y + int(
-                    (self.tileset_list_scroll_y / max_scroll) * max(1, visible_h - thumb_h)
-                )
-                sbar = pygame.Rect(list_inner.right + 4, list_inner.y, 5, visible_h)
-                pygame.draw.rect(self.screen, (35, 35, 42), sbar)
-                pygame.draw.rect(self.screen, (95, 98, 115), (sbar.x, t_y, 5, thumb_h))
-            # FEATURE-MAP-024: horizontal scrollbar for tileset list
-            content_w = TILESET_LIST_W + TILESET_LIST_CHILD_INDENT_PX * 4
-            inner_w = list_inner.w
-            max_scroll_x = max(0, content_w - inner_w)
-            if max_scroll_x > 0 and list_inner.w > 40:
-                thumb_w = max(28, int(inner_w * inner_w / content_w))
-                t_x = list_inner.x + int(
-                    (self.tileset_list_scroll_x / max_scroll_x) * max(1, inner_w - thumb_w)
-                )
-                hbar = pygame.Rect(list_inner.x, list_inner.bottom + 2, inner_w, 5)
-                pygame.draw.rect(self.screen, (35, 35, 42), hbar)
-                pygame.draw.rect(self.screen, (95, 98, 115), (t_x, hbar.y, thumb_w, 5))
+            self._draw_tileset_sidebar_expanded()
         if self.sheet:
             self._clamp_palette_scroll()
             ox, oy, scale, visible_h = self._palette_thumb_metrics()
@@ -4781,46 +5230,17 @@ class MapEditor:
             (self.settings_remove_event_rect.x + 10, self.settings_remove_event_rect.y + 7),
         )
         y += 36
-        can_remove_layer = len(self.tile_layers) > 1
-        ln = (
-            self.tile_layer_ids[self.active_layer_index]
-            if self.tile_layer_ids and self.active_layer_index < len(self.tile_layer_ids)
-            else "?"
-        )
-        self.settings_remove_current_layer_rect = pygame.Rect(content.x + 6, y, content.w - 12, 42)
-        rl_bg = (95, 55, 55) if can_remove_layer else (52, 52, 58)
-        rl_br = (140, 85, 85) if can_remove_layer else (70, 70, 78)
-        pygame.draw.rect(self.screen, rl_bg, self.settings_remove_current_layer_rect)
-        pygame.draw.rect(self.screen, rl_br, self.settings_remove_current_layer_rect, 1)
-        self.screen.blit(
-            fs.render("Remove current tile layer…", True, (245, 245, 250)),
-            (self.settings_remove_current_layer_rect.x + 10, self.settings_remove_current_layer_rect.y + 5),
-        )
+        self.settings_remove_current_layer_rect = pygame.Rect(0, 0, 0, 0)
+        self._settings_tile_layer_row_rects = []
         self.screen.blit(
             fs.render(
-                f'Active: "{ln}"  ·  keyboard: {self.key_primary("layer_remove")}',
+                "Tile layers: use the Layers panel in the left sidebar (Add/Copy/Paste/Del).",
                 True,
-                (200, 200, 210) if can_remove_layer else (130, 130, 138),
+                (160, 165, 180),
             ),
-            (self.settings_remove_current_layer_rect.x + 10, self.settings_remove_current_layer_rect.y + 22),
+            (content.x + 6, y),
         )
-        y += 52
-        self.screen.blit(fs.render("Tile layers", True, (190, 200, 220)), (content.x + 6, y))
-        y += 18
-        self._settings_tile_layer_row_rects = []
-        row_h = lh + 4
-        for li, lid in enumerate(self.tile_layer_ids):
-            row = pygame.Rect(content.x + 6, y, content.w - 12, row_h)
-            lock = pygame.Rect(row.right - 24, row.y + 2, 20, row_h - 4)
-            if li == self.active_layer_index:
-                pygame.draw.rect(self.screen, (42, 58, 48), row)
-            lbl = mtext.truncate_to_width(fs, lid, row.w - 36)
-            lock_on = li < len(self.tile_layer_locked) and self.tile_layer_locked[li]
-            self.screen.blit(fs.render(lbl, True, (220, 225, 235)), (row.x + 8, row.y + 2))
-            self.screen.blit(fs.render("🔒" if lock_on else "🔓", True, (200, 205, 215)), (lock.x + 2, lock.y + 1))
-            self._settings_tile_layer_row_rects.append((li, row, lock))
-            y += row_h + 2
-        y += 8
+        y += 22
         self.screen.blit(
             fs.render("Event Engine", True, (190, 200, 220)),
             (content.x + 6, y),
@@ -4868,19 +5288,6 @@ class MapEditor:
         if self.settings_remove_event_rect.collidepoint(mx, my):
             self.request_remove_event_layer()
             return True
-        if self.settings_remove_current_layer_rect.collidepoint(mx, my):
-            if len(self.tile_layers) > 1:
-                self.layer_remove_confirm_idx = self.active_layer_index
-                self._close_help_overlay()
-            return True
-        for li, row, lock in getattr(self, "_settings_tile_layer_row_rects", []):
-            if lock.collidepoint(mx, my):
-                if li < len(self.tile_layer_locked):
-                    self.tile_layer_locked[li] = not self.tile_layer_locked[li]
-                return True
-            if row.collidepoint(mx, my):
-                self.active_layer_index = li
-                return True
         if self.settings_ee_follow_main_rect.collidepoint(mx, my):
             sec = self.config_get_section("eventEngine")
             sec["selectSwitchesMainMap"] = not bool(sec.get("selectSwitchesMainMap", False))
@@ -5842,11 +6249,13 @@ class MapEditor:
                 [
                     f"Layers: {self.key_primary('layer_prev')} / {self.key_primary('layer_next')}, "
                     f"add {self.key_primary('layer_add')}, remove {self.key_primary('layer_remove')}. "
-                    "Lock the active tile layer with the lock icon on the layer chip or in Settings → Tile layers; "
+                    "Manage layers in the left sidebar Layers panel (Add/Copy/Paste/Del, lock, rename). "
+                    "Lock the active layer with the lock icon on the layer chip or in the sidebar; "
                     "locked layers cannot be painted, filled, or erased. "
-                    f"Tilesets: {self.key_primary('tileset_prev')} / {self.key_primary('tileset_next')}, "
-                    f"import {self.key_primary('import_tileset')}, rescale {self.key_primary('rescale_tileset')}. "
-                    "Use Settings (gear) or Help → Settings for event layer add/remove.",
+                    f"Tilesets: search in the sidebar; {self.key_primary('tileset_prev')} / "
+                    f"{self.key_primary('tileset_next')}, import {self.key_primary('import_tileset')}, "
+                    f"rescale {self.key_primary('rescale_tileset')}. "
+                    "Use Settings (gear) or Help → Settings for event layer add/remove only.",
                 ],
             )
             out.append(("head", "Walk mode", None))
@@ -6357,10 +6766,24 @@ class MapEditor:
                         and not self.folder_new_prompt_active
                         and not self.folder_color_prompt_id
                     ):
-                        if self.tileset_list_rect.collidepoint(mx, my):
+                        if self.tileset_list_rect.collidepoint(mx, my) and not self.tileset_list_collapsed:
+                            layout = self._sidebar_layout or self._measure_tileset_sidebar_layout()
+                            layers_list = layout.get("layers_list")
+                            tilesets_list = layout.get("tilesets_list")
+                            mods = pygame.key.get_mods()
+                            if layers_list and layers_list.collidepoint(mx, my):
+                                self.layer_list_scroll_y -= int(event.y) * 14
+                                self._clamp_layer_list_scroll()
+                            elif tilesets_list and tilesets_list.collidepoint(mx, my):
+                                if mods & pygame.KMOD_SHIFT:
+                                    self.tileset_list_scroll_x -= int(event.y) * 14
+                                    self._clamp_tileset_list_scroll_x()
+                                else:
+                                    self.tileset_list_scroll_y -= int(event.y) * 14
+                                    self._clamp_tileset_list_scroll()
+                        elif self.tileset_list_rect.collidepoint(mx, my):
                             mods = pygame.key.get_mods()
                             if mods & pygame.KMOD_SHIFT:
-                                # FEATURE-MAP-024: horizontal scroll for tileset list
                                 self.tileset_list_scroll_x -= int(event.y) * 14
                                 self._clamp_tileset_list_scroll_x()
                             else:
@@ -6425,6 +6848,8 @@ class MapEditor:
                         self.events_launcher_modal.handle_mouse_motion(mx, my)
                     if self.event_engine_modal.open:
                         self.event_engine_modal.handle_mouse_motion(mx, my)
+                    if self._sidebar_splitter_drag:
+                        self._update_splitter_from_mouse(my)
                     self.hover_cell = (
                         self.map_cell_at_pixel(mx, my)
                         if self.map_canvas_rect.collidepoint(mx, my)
@@ -6580,10 +7005,7 @@ class MapEditor:
                         self.map_delete_confirm_stem = None
                         continue
                     if self.layer_chip_lock_btn.collidepoint(event.pos) and event.button == 1:
-                        if self.active_layer_index < len(self.tile_layer_locked):
-                            self.tile_layer_locked[self.active_layer_index] = not self.tile_layer_locked[
-                                self.active_layer_index
-                            ]
+                        self._toggle_tile_layer_lock(self.active_layer_index)
                         continue
                     if self.events_btn_rect.collidepoint(event.pos) and event.button == 1:
                         self._clear_all_list_drags()
@@ -6632,11 +7054,13 @@ class MapEditor:
                         self._clear_all_list_drags()
                         self.add_tileset_folder()
                         continue
-                    if self.tileset_list_rect.collidepoint(event.pos) and event.button == 1:
-                        if self.tileset_list_collapsed:
+                    if self.tileset_list_rect.collidepoint(event.pos):
+                        if self._handle_sidebar_click(*event.pos, event.button):
+                            continue
+                        if self.tileset_list_collapsed and event.button == 1:
                             self._set_tileset_list_collapsed(False)
                             continue
-                        if self._tileset_list_collapse_btn_rect.collidepoint(event.pos):
+                        if self._tileset_list_collapse_btn_rect.collidepoint(event.pos) and event.button == 1:
                             self._set_tileset_list_collapsed(True)
                             continue
                     if self.tileset_list_rect.collidepoint(event.pos):
@@ -6678,18 +7102,20 @@ class MapEditor:
                                     self._folder_click_prev_time = 0.0
                                 else:
                                     self._clear_tileset_list_drag()
-                                    self._folder_drag_id = str(fid)
-                                    self._folder_drag_start = event.pos
-                                    self._folder_drag_moved = False
+                                    if not self.tileset_list_search.strip():
+                                        self._folder_drag_id = str(fid)
+                                        self._folder_drag_start = event.pos
+                                        self._folder_drag_moved = False
                                     self._folder_click_prev_time = now
                                     self._folder_click_prev_id = str(fid)
                             continue
                         if hit == "tileset" and payload is not None:
                             self._clear_folder_list_drag()
                             idx = int(payload)
-                            self._tileset_drag_def_index = idx
-                            self._tileset_drag_start = event.pos
-                            self._tileset_drag_moved = False
+                            if not self.tileset_list_search.strip():
+                                self._tileset_drag_def_index = idx
+                                self._tileset_drag_start = event.pos
+                                self._tileset_drag_moved = False
                             now = time.time()
                             if (
                                 idx == self._list_click_prev_index
@@ -6785,6 +7211,9 @@ class MapEditor:
                                 self.trans[cy][cx] = 1 if event.button == 1 else 0
                 elif event.type == pygame.MOUSEBUTTONUP:
                     mouse_down = False
+                    if self._sidebar_splitter_drag and event.button == 1:
+                        self._sidebar_splitter_drag = False
+                        self._persist_sidebar_section_split_ratio()
                     if self.event_doc_popout_modal.open:
                         self.event_doc_popout_modal.handle_mouse_up(*event.pos, event.button)
                     if self.event_action_modal.open:
@@ -7019,6 +7448,7 @@ class MapEditor:
                             idx = self.layer_remove_confirm_idx
                             self.layer_remove_confirm_idx = None
                             if idx is not None:
+                                self._undo_checkpoint()
                                 self._remove_tile_layer_at(idx)
                         continue
                     if self.tileset_delete_confirm_id:
@@ -7116,6 +7546,37 @@ class MapEditor:
                             if event.unicode.isdigit() or event.unicode in ",-":
                                 self.folder_color_prompt_buffer += event.unicode
                         continue
+                    if self.layer_rename_index is not None:
+                        if event.key == pygame.K_ESCAPE:
+                            self.layer_rename_index = None
+                            self.layer_rename_buffer = ""
+                        elif event.key in _ENTER_KEYS:
+                            self._apply_layer_rename()
+                        elif event.key == pygame.K_BACKSPACE:
+                            self.layer_rename_buffer = self.layer_rename_buffer[:-1]
+                        elif event.unicode and event.unicode.isprintable():
+                            if event.unicode.isalnum() or event.unicode in "._-":
+                                self.layer_rename_buffer += event.unicode
+                        continue
+                    if self.tileset_list_search_focus:
+                        if event.key == pygame.K_ESCAPE:
+                            if self.tileset_list_search:
+                                self.tileset_list_search = ""
+                                self._tileset_list_rows_cache = None
+                            else:
+                                self.tileset_list_search_focus = False
+                            self._clamp_tileset_list_scroll()
+                            continue
+                        if event.key == pygame.K_BACKSPACE:
+                            self.tileset_list_search = self.tileset_list_search[:-1]
+                            self._tileset_list_rows_cache = None
+                            self._clamp_tileset_list_scroll()
+                            continue
+                        if event.unicode and event.unicode.isprintable() and len(self.tileset_list_search) < 64:
+                            self.tileset_list_search += event.unicode
+                            self._tileset_list_rows_cache = None
+                            self._clamp_tileset_list_scroll()
+                            continue
                     if self.folder_rename_id is not None:
                         if event.key == pygame.K_ESCAPE:
                             self.folder_rename_id = None
@@ -7402,10 +7863,7 @@ class MapEditor:
                     elif self.edit_mode not in ("map_id", "conn") and event_matches_key(
                         event, self.key_config.get("layer_remove", [])
                     ):
-                        if len(self.tile_layers) <= 1:
-                            self.set_status("Cannot remove the last tile layer.", kind="err")
-                        else:
-                            self.layer_remove_confirm_idx = self.active_layer_index
+                        self._request_remove_layer_at(self.active_layer_index)
                     elif event.key == pygame.K_i:
                         self.edit_mode = "map_id" if self.edit_mode != "map_id" else "paint"
                         self.text_buffer = ""
@@ -7480,13 +7938,16 @@ class MapEditor:
         w, h = self.map_w, self.map_h
         empty = [[None for _ in range(w)] for _ in range(h)]
         lid = self._unique_layer_id()
-        self.tile_layers.append(empty)
-        self.tile_layer_ids.append(lid)
-        self.tile_layer_locked.append(False)
-        self.active_layer_index = len(self.tile_layers) - 1
+        ev = self.event_layer_index()
+        insert_idx = ev if ev is not None else len(self.tile_layers)
+        self._undo_checkpoint()
+        self._insert_tile_layer_at(insert_idx, empty, lid)
         self.set_status(f"Added tile layer '{lid}'.", kind="ok")
 
     def _remove_tile_layer_at(self, idx: int) -> None:
+        if self._is_ground_layer_index(idx):
+            self.set_status('Cannot remove "ground" layer.', kind="err")
+            return
         if len(self.tile_layers) <= 1:
             self.set_status("Cannot remove the last tile layer.", kind="err")
             return

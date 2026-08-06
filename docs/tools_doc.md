@@ -39,7 +39,9 @@ TOOL: tools/map_editor.py
 
         BUG-MAP-096/097/098 + QA audit (2026): wild canvas loads/persists wild data on open/close/Save; session map cache includes wild fields with LRU cap (`SESSION_MAP_CACHE_MAX`); tile blits use scaled-tile LRU cache; map tile loop skipped under blocking modals; palette thumb, tileset list rows, valid-stands coverage grid, sheet cache, and wild overlay surfaces are cached/reused; world node overlap fixup throttled during drag (`WORLD_FIXUP_THROTTLE_MS`). Tests: `tests/test_map_editor_qa_audit.py`.
         FEATURE-MAP-099/100: collapsible tileset panel + NPC sprite editor modal (`npc_sprite_editor_modal`, launcher NPC Sprites row).
-        FEATURE-MAP-103: `tile_layer_locked` parallel to tile layers; lock icon on layer chip and Settings list blocks paint/fill/eraser (editor-only, not in map JSON).
+        FEATURE-MAP-103: `tile_layer_locked` parallel to tile layers; lock icon on layer chip and sidebar layer rows blocks paint/fill/eraser (editor-only, not in map JSON).
+        BUG-MAP-107: session map cache includes `tile_layer_locked`; `_sync_tile_layer_locked_len()` and `_toggle_tile_layer_lock()` keep lock state aligned after map switches.
+        FEATURE-MAP-111: left sidebar split into Tilesets (search, folder list; drag disabled while search active) and Layers (Add/Copy/Paste/Del, select, lock, rename; ground at bottom, event hidden). Draggable splitter; `tilesetList.sectionSplitRatio` (default 0.55). `TILESET_LIST_W` 310px. Settings tab: event layer add/remove only. Phase 2: child tilesets in folders use compact row height (`TILESET_LIST_CHILD_ROW_EXTRA`), cumulative Y layout for scroll/hit-test/drag, inset lighter rects, single-line truncate.
         FEATURE-MAP-104: Help tab **NPC Sprites** documents sprite editor; `npcSpriteEditor` config section for palette/defaultZoom.
         BUG-MAP-106: `relayout()` records `_map_toolbar_left` (left edge of the Event/Overworld/Help/Settings cluster); `draw()` anchors `layer_chip_lock_btn` immediately left of it instead of `layer_chip_rect.right`, so the lock button no longer overlaps Settings.
         IMPROVEMENT-MAP-098: bottom footer pane removed; vertical space reclaimed for map/palette/tileset list. Map metadata shown in layer chip; transient status messages render as semi-transparent toast bar at the bottom of `map_viewport_rect`; inline prompts (map-id, connection) appear in the same toast overlay.
@@ -245,7 +247,8 @@ TOOL: tools/wild_encounter_modal.py
         FEATURE-MAP-099: left tileset list panel collapses to `TILESET_LIST_COLLAPSED_W` (28px) via
         header chevron; persisted in `map_editor_config.json` → `tilesetList.collapsed`. Unfiled
         section uses `section:unfiled` in `editorTilesetFolders.collapsed`; child tilesets indent
-        `TILESET_LIST_CHILD_INDENT_PX` (20).
+        `TILESET_LIST_CHILD_INDENT_PX` (20). FEATURE-MAP-111 adds `tilesetList.sectionSplitRatio`,
+        tileset search, and the Layers sub-panel (see map_editor NOTES).
 
 TOOL: tools/npc_sprite_sheet_helpers.py
 

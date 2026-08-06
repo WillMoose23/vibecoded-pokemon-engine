@@ -1,5 +1,30 @@
 # Issue tracker
 
+## IMPROVEMENT-DOC-009
+
+```
+ID: IMPROVEMENT-DOC-009
+TYPE: IMPROVEMENT
+TITLE: Cursor rule — helper scripts go in docs/cursor_helper_scripts
+
+DESCRIPTION:
+Added an always-applied Cursor rule so agents place new helper/utility scripts
+(validators, migrations, codegen, audits, Cursor workflow tools) in
+docs/cursor_helper_scripts/ instead of tools/ or the repo root. Updated the
+directory README to reference the rule.
+
+EXPECTED_BEHAVIOR:
+- New non-runtime helper scripts are created under docs/cursor_helper_scripts/.
+- tools/ remains reserved for map_editor.py and its direct runtime modules.
+
+SCOPE:
+.cursor/rules/Cursor-Helper-Scripts-Rule.mdc, docs/cursor_helper_scripts/README.md
+
+PRIORITY: LOW
+STATUS: DONE
+ASSIGNED_TO: Cursor
+```
+
 ## REFACTOR-TOOLS-001
 
 ```
@@ -24,6 +49,98 @@ tools/map_editor.py, tests, docs/tools_doc.md, docs/source_doc.md,
 docs/cursor_helper_scripts/README.md, .cursor/skills/event-script-opcode-docs/SKILL.md
 
 PRIORITY: LOW
+STATUS: DONE
+ASSIGNED_TO: Cursor
+```
+
+## BUG-MAP-108
+
+```
+ID: BUG-MAP-108
+TYPE: BUG
+TITLE: Sidebar splitter drag writes map_editor_config.json every mousemove frame
+
+DESCRIPTION:
+_update_splitter_from_mouse called _set_sidebar_section_split_ratio on each
+MOUSEMOTION while dragging, which read and wrote the full config JSON every
+frame (disk I/O + json parse/serialize at 60 Hz).
+
+STEPS_TO_REPRODUCE:
+1. Open map editor with expanded tileset sidebar.
+2. Drag the tilesets/layers splitter.
+3. Observe repeated writes to tools/map_editor_config.json.
+
+EXPECTED_BEHAVIOR:
+Splitter ratio updates in memory during drag; config persisted once on release.
+
+ACTUAL_BEHAVIOR:
+Config file rewritten on every mousemove during drag.
+
+SCOPE:
+tools/map_editor.py (_update_splitter_from_mouse, _set_sidebar_section_split_ratio)
+
+PRIORITY: MEDIUM
+STATUS: DONE
+ASSIGNED_TO: Cursor
+```
+
+## BUG-MAP-107
+
+```
+ID: BUG-MAP-107
+TYPE: BUG
+TITLE: Tile layer lock state lost after session map switch
+
+DESCRIPTION:
+tile_layer_locked was omitted from _snapshot_session_map_bundle and
+_restore_session_map_bundle. After switching maps via the session cache,
+len(tile_layer_locked) could diverge from len(tile_layers); lock toggles
+silently no-op due to index guards.
+
+STEPS_TO_REPRODUCE:
+1. Open map A, lock a tile layer.
+2. Switch to map B and back to map A via session cache (map prev/next).
+3. Toggle lock on the layer chip or sidebar.
+
+EXPECTED_BEHAVIOR:
+Lock state persists across session-cached map switches; toggles always work.
+
+ACTUAL_BEHAVIOR:
+Lock list length desyncs; toggles may no-op; lock UI shows wrong state.
+
+SCOPE:
+tools/map_editor.py (session cache, _sync_tile_layer_locked_len, _toggle_tile_layer_lock)
+
+PRIORITY: HIGH
+STATUS: DONE
+ASSIGNED_TO: Cursor
+```
+
+## FEATURE-MAP-111
+
+```
+ID: FEATURE-MAP-111
+TYPE: FEATURE
+TITLE: Sidebar tileset search and tile layer manager panel
+
+DESCRIPTION:
+Redesign the left tileset sidebar: draggable splitter between tilesets and
+layers sections; tileset search with folder auto-expand; layer list with
+Add/Copy/Paste/Delete, select, lock, rename; ground pinned at index 0 bottom
+of list; event layer hidden (Settings only). Remove tile-layer list from
+Help → Settings.
+
+EXPECTED_BEHAVIOR:
+- Tileset search filters rows; drag/drop disabled while search active.
+- Layers GUI in sidebar is sole layer manager; ground cannot delete/rename/move.
+- Paste inserts at `max(1, active+1)` below event when present.
+- sectionSplitRatio persists in map_editor_config.json.
+- Phase 2: indented child tileset rows use compact height (linesize + 4), cumulative Y for scroll/hit-test/drag, inset lighter rects, single-line truncate.
+
+SCOPE:
+tools/map_editor.py, tools/map_editor_config.json, tests/, docs/
+
+PRIORITY: HIGH
 STATUS: DONE
 ASSIGNED_TO: Cursor
 ```

@@ -2,6 +2,8 @@
 
 Python utilities for **Cursor IDE workflow**, **data validation**, **one-off migrations**, and **opcode parity checks**. These are **not** part of the game runtime or the pygame map/event editor application (`tools/map_editor.py` and its modal modules).
 
+**Location policy:** Cursor agents must create new helper/utility scripts here — see `.cursor/rules/Cursor-Helper-Scripts-Rule.mdc`.
+
 ## Cursor IDE sync
 
 | Script | Purpose |
