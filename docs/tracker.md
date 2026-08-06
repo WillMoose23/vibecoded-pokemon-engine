@@ -1,5 +1,33 @@
 # Issue tracker
 
+## IMPROVEMENT-DOC-007
+
+```
+ID: IMPROVEMENT-DOC-007
+TYPE: IMPROVEMENT
+TITLE: Add macOS setup/run instructions and system requirements to README
+
+DESCRIPTION:
+README.md contained only a one-line project description with no build, run, or
+dependency instructions. Added a macOS-focused setup guide covering system
+requirements, Homebrew dependency installation, building/running the game via
+Makefile, and running the pygame-based map/event editor (tools/map_editor.py).
+
+EXPECTED_BEHAVIOR:
+- README documents supported OS/hardware/toolchain requirements.
+- README documents Homebrew package installation (sdl2, sdl2_ttf, sdl2_image,
+  sdl2_mixer) and Python/pygame setup for the editor.
+- README documents `make`, `make run`, `make clean`, `make test` and
+  `python3 tools/map_editor.py` usage.
+
+SCOPE:
+README.md
+
+PRIORITY: LOW
+STATUS: DONE
+ASSIGNED_TO: Cursor
+```
+
 ## BUG-MAP-101
 
 ```
