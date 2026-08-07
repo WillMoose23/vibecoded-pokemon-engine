@@ -1,0 +1,74 @@
+---
+description: Never merge into main unless the user explicitly requests it; require AskQuestion confirmation before any main merge.
+alwaysApply: true
+---
+
+# Git — Never Merge Into `main` Without Explicit Request
+
+## Policy
+
+- **`main` is protected.** The agent must **never** merge anything **into** `main` unless the user **explicitly** asks for that exact operation.
+- **Default branch for agent work:** `development` — push, pull, commit, and merge targets stay on `development` unless the user says otherwise.
+- **User merges on GitHub** is the normal path: agent pushes `development`; user reviews and merges via PR on GitHub.
+
+**Remote:** `origin` → `https://github.com/WillMoose23/vibecoded-pokemon-engine.git`
+
+---
+
+## What counts as “merge into main” (forbidden unless explicit + confirmed)
+
+- `git checkout main` then `git merge <branch>`
+- `git merge origin/main` while on `main`
+- Merging `development` (or any branch) **into** `main` locally
+- `git push origin main` after a local merge to main
+- `gh pr merge` targeting **`main`** without confirmation
+- Any wording equivalent to: “merge to main”, “merge into main”, “ship to main”, “merge development → main”
+
+---
+
+## What is allowed without a main-merge confirmation
+
+- Push to **`origin/development`** (see **Git-Push-Development-Rule**)
+- Pull/sync **`development`** (see **Git-Pull-Sync-Rule**)
+- Merge **`origin/main` into `development`** only when the user **explicitly** asks to sync main into development (not when they say “push to development” or “merge into development” meaning publish local commits)
+- Stay on `development`; never checkout `main` for routine work
+
+---
+
+## Disambiguation (common mistake)
+
+| User says | Agent should |
+|-----------|----------------|
+| “push to development”, “merge into development”, “publish development” | **Push** local `development` to `origin/development` — **do not** merge `main` |
+| “sync from GitHub”, “pull” | Pull **`development`** (default) |
+| “merge main into development”, “sync main into dev” | Merge `origin/main` → `development` (only if explicitly requested) |
+| “merge to main”, “merge development into main” | **Stop** → run confirmation flow below |
+
+---
+
+## Confirmation flow (required when user explicitly requests merge into `main`)
+
+Before running **any** command that merges into `main`:
+
+1. **Do not** run merge/push-to-main commands yet.
+2. Use **AskQuestion** with a clear “Are you sure?” prompt, for example:
+
+   **Title:** Merge into `main`?
+   **Question:** You asked to merge into `main`. This updates the production/stable branch. Proceed?
+   **Options:**
+   - **Yes — merge into main** (proceed only if selected)
+   - **No — cancel** (default safe outcome; do nothing to `main`)
+
+3. Proceed **only** if the user selects the explicit yes/confirm option.
+4. If they cancel, skip, or choose anything else: **do not merge into `main`**; report what was skipped and offer to push `development` instead.
+
+---
+
+## Forbidden without explicit request **and** confirmation
+
+- Any merge **into** `main`
+- `git push origin main`
+- `git push --force` to `main`
+- Auto-merging PRs to `main` on the user’s behalf
+
+Pair with **Git-Push-Development-Rule** (never push directly to `main`) and **Git-Pull-Sync-Rule** (default pull branch is `development`).

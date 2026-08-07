@@ -83,7 +83,7 @@ Report:
 
 1. Pushed branch: **`development`**
 2. Compare URL: `https://github.com/WillMoose23/vibecoded-pokemon-engine/compare/main...development`
-3. User merges to **`main`** when approved — agent does not merge unless explicitly asked.
+3. User merges to **`main`** when approved on GitHub — agent does not merge into `main` unless explicitly asked; see **Git-Main-Merge-Rule** (requires AskQuestion confirmation).
 
 ---
 
